@@ -138,15 +138,15 @@ def main():
     )
     
     if new_enable_secret_sharing:
+        # Automatically set shares to match number of facilities
+        new_secret_sharing_shares = new_facilities
+        st.sidebar.info(f"Shares set to match facilities: {new_secret_sharing_shares}")
+        
         new_secret_sharing_threshold = st.sidebar.number_input(
             "Threshold (t)",
-            min_value=2, max_value=10, value=st.session_state.secret_sharing_threshold,
+            min_value=2, max_value=new_facilities, 
+            value=min(st.session_state.secret_sharing_threshold, new_facilities),
             help="Minimum number of shares required to reconstruct the secret"
-        )
-        new_secret_sharing_shares = st.sidebar.number_input(
-            "Total Shares (n)",
-            min_value=3, max_value=15, value=st.session_state.secret_sharing_shares,
-            help="Total number of shares to create"
         )
     else:
         new_secret_sharing_threshold = st.session_state.secret_sharing_threshold
