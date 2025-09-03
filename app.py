@@ -34,14 +34,25 @@ if 'current_round' not in st.session_state:
     st.session_state.current_round = 0
 if 'metrics_history' not in st.session_state:
     st.session_state.metrics_history = []
+# System configuration parameters
+if 'num_healthcare_facilities' not in st.session_state:
+    st.session_state.num_healthcare_facilities = 8
+if 'num_fog_nodes' not in st.session_state:
+    st.session_state.num_fog_nodes = 3
+if 'committee_size' not in st.session_state:
+    st.session_state.committee_size = 5
+if 'epsilon' not in st.session_state:
+    st.session_state.epsilon = 0.1
+if 'delta' not in st.session_state:
+    st.session_state.delta = 1e-5
 
 def initialize_system():
     """Initialize the federated learning system"""
     if st.session_state.system is None:
         st.session_state.system = FederatedLearningSystem(
-            num_healthcare_facilities=8,
-            num_fog_nodes=3,
-            committee_size=5
+            num_healthcare_facilities=st.session_state.num_healthcare_facilities,
+            num_fog_nodes=st.session_state.num_fog_nodes,
+            committee_size=st.session_state.committee_size
         )
     return st.session_state.system
 
@@ -49,21 +60,72 @@ def main():
     st.title("🏥 Secure Hierarchical Federated Learning for Healthcare")
     st.markdown("### Byzantine-Resilient FL with Differential Privacy & Secret Sharing")
     
-    # Sidebar navigation
+    # Sidebar configuration
+    st.sidebar.title("System Configuration")
+    
+    # System parameters
+    st.sidebar.subheader("Network Parameters")
+    new_facilities = st.sidebar.number_input(
+        "Healthcare Facilities",
+        min_value=2, max_value=20, value=st.session_state.num_healthcare_facilities
+    )
+    new_fog_nodes = st.sidebar.number_input(
+        "Fog Nodes", 
+        min_value=1, max_value=10, value=st.session_state.num_fog_nodes
+    )
+    new_committee_size = st.sidebar.number_input(
+        "Validator Committee Size",
+        min_value=3, max_value=15, value=st.session_state.committee_size
+    )
+    
+    # Privacy parameters
+    st.sidebar.subheader("Privacy Parameters")
+    new_epsilon = st.sidebar.slider(
+        "Epsilon (ε) - Privacy Budget",
+        min_value=0.01, max_value=1.0, value=st.session_state.epsilon, step=0.01
+    )
+    new_delta = st.sidebar.selectbox(
+        "Delta (δ)",
+        [1e-3, 1e-4, 1e-5, 1e-6], index=[1e-3, 1e-4, 1e-5, 1e-6].index(st.session_state.delta)
+    )
+    
+    # Check if parameters changed
+    params_changed = (
+        new_facilities != st.session_state.num_healthcare_facilities or
+        new_fog_nodes != st.session_state.num_fog_nodes or
+        new_committee_size != st.session_state.committee_size or
+        new_epsilon != st.session_state.epsilon or
+        new_delta != st.session_state.delta
+    )
+    
+    if params_changed:
+        st.session_state.num_healthcare_facilities = new_facilities
+        st.session_state.num_fog_nodes = new_fog_nodes
+        st.session_state.committee_size = new_committee_size
+        st.session_state.epsilon = new_epsilon
+        st.session_state.delta = new_delta
+        st.session_state.system = None  # Reset system to reinitialize with new params
+        st.session_state.simulation_started = False
+        st.session_state.current_round = 0
+        st.session_state.metrics_history = []
+    
+    st.sidebar.markdown("---")
+    
+    # Navigation
     st.sidebar.title("Navigation")
     page = st.sidebar.selectbox(
         "Select Page",
-        ["System Overview", "Architecture", "Registration & Setup", "Training Simulation", "Privacy & Security Metrics", "Byzantine Tolerance"]
+        ["System Overview", "Architecture", "Training Simulation", "Accuracy & Loss Graphs", "Privacy & Security Metrics", "Byzantine Tolerance"]
     )
     
     if page == "System Overview":
         show_system_overview()
     elif page == "Architecture":
         show_architecture()
-    elif page == "Registration & Setup":
-        show_registration_setup()
     elif page == "Training Simulation":
         show_training_simulation()
+    elif page == "Accuracy & Loss Graphs":
+        show_accuracy_loss_graphs()
     elif page == "Privacy & Security Metrics":
         show_privacy_security_metrics()
     elif page == "Byzantine Tolerance":
@@ -75,16 +137,17 @@ def show_system_overview():
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("Healthcare Facilities", "8", "Active")
-        st.metric("Fog Nodes", "3", "Online")
+        st.metric("Healthcare Facilities", str(st.session_state.num_healthcare_facilities), "Active")
+        st.metric("Fog Nodes", str(st.session_state.num_fog_nodes), "Online")
     
     with col2:
-        st.metric("Validator Committee Size", "5", "Rotating")
+        st.metric("Validator Committee Size", str(st.session_state.committee_size), "Rotating")
         st.metric("Security Level", "High", "✅ All checks passed")
     
     with col3:
-        st.metric("Privacy Guarantee", "ε-DP", "ε=0.1")
-        st.metric("Byzantine Tolerance", "33%", "Fault tolerant")
+        st.metric("Privacy Guarantee", "ε-DP", f"ε={st.session_state.epsilon}")
+        byzantine_tolerance = f"{int(100/3)}%"
+        st.metric("Byzantine Tolerance", byzantine_tolerance, "Fault tolerant")
     
     st.markdown("---")
     
@@ -123,12 +186,14 @@ def show_architecture():
     
     # Define positions for components
     # Healthcare Facilities (bottom tier)
-    facilities_x = [1, 2, 3, 4, 5, 6, 7, 8]
-    facilities_y = [1] * 8
+    num_facilities = st.session_state.num_healthcare_facilities
+    facilities_x = list(range(1, num_facilities + 1))
+    facilities_y = [1] * num_facilities
     
     # Fog Nodes (middle tier)
-    fog_x = [2.5, 4.5, 6.5]
-    fog_y = [3] * 3
+    num_fog = st.session_state.num_fog_nodes
+    fog_x = [2.5 + i * (6 / max(1, num_fog - 1)) for i in range(num_fog)] if num_fog > 1 else [4.5]
+    fog_y = [3] * num_fog
     
     # Leader Server (top tier)
     leader_x = [4.5]
@@ -143,7 +208,7 @@ def show_architecture():
         x=facilities_x, y=facilities_y,
         mode='markers+text',
         marker=dict(size=20, color='lightblue', symbol='square'),
-        text=[f'HC{i}' for i in range(1, 9)],
+        text=[f'HC{i}' for i in range(1, num_facilities + 1)],
         textposition="middle center",
         name='Healthcare Facilities'
     ))
@@ -153,7 +218,7 @@ def show_architecture():
         x=fog_x, y=fog_y,
         mode='markers+text',
         marker=dict(size=30, color='lightgreen', symbol='diamond'),
-        text=['Fog1', 'Fog2', 'Fog3'],
+        text=[f'Fog{i}' for i in range(1, num_fog + 1)],
         textposition="middle center",
         name='Fog Nodes'
     ))
@@ -181,7 +246,7 @@ def show_architecture():
     # Add connections
     # Facilities to fog nodes
     for i, fx in enumerate(facilities_x):
-        fog_idx = i // 3  # Distribute facilities across fog nodes
+        fog_idx = i // max(1, len(facilities_x) // num_fog)  # Distribute facilities across fog nodes
         if fog_idx >= len(fog_x):
             fog_idx = len(fog_x) - 1
         fig.add_shape(
@@ -367,18 +432,18 @@ def show_training_simulation():
                         st.write("📱 **Phase 1**: Local model training at healthcare facilities")
                         local_progress = st.progress(0)
                         
-                        for i in range(8):
-                            local_progress.progress((i + 1) / 8)
+                        for i in range(st.session_state.num_healthcare_facilities):
+                            local_progress.progress((i + 1) / st.session_state.num_healthcare_facilities)
                             time.sleep(0.3)
                         
                         st.success("✅ Local training completed")
                         
                         # Differential privacy phase
                         st.write("🔒 **Phase 2**: Applying differential privacy")
-                        dp_system = DifferentialPrivacy(epsilon=epsilon)
+                        dp_system = DifferentialPrivacy(epsilon=st.session_state.epsilon, delta=st.session_state.delta)
                         
                         privacy_metrics = []
-                        for i in range(8):
+                        for i in range(st.session_state.num_healthcare_facilities):
                             # Simulate gradient with noise
                             original_grad = np.random.normal(0, 1, 10)
                             noisy_grad = dp_system.add_noise(original_grad)
@@ -393,27 +458,27 @@ def show_training_simulation():
                         sss = ShamirSecretSharing(threshold=3, num_shares=5)
                         
                         sharing_progress = st.progress(0)
-                        for i in range(8):
-                            sharing_progress.progress((i + 1) / 8)
+                        for i in range(st.session_state.num_healthcare_facilities):
+                            sharing_progress.progress((i + 1) / st.session_state.num_healthcare_facilities)
                             time.sleep(0.2)
                         
                         st.success("✅ Secret shares distributed")
                         
                         # Validation phase
                         st.write("👥 **Phase 4**: Committee validation")
-                        committee = ValidatorCommittee(committee_size=5)
-                        validation_results = committee.validate_shares([f"share_{i}" for i in range(8)])
+                        committee = ValidatorCommittee(committee_size=st.session_state.committee_size)
+                        validation_results = committee.validate_shares([f"share_{i}" for i in range(st.session_state.num_healthcare_facilities)])
                         
                         valid_shares = sum(validation_results)
-                        st.success(f"✅ Validation completed ({valid_shares}/8 shares approved)")
+                        st.success(f"✅ Validation completed ({valid_shares}/{st.session_state.num_healthcare_facilities} shares approved)")
                         
                         # Aggregation phase
                         st.write("🔄 **Phase 5**: Hierarchical aggregation")
                         
                         # Fog node aggregation
                         fog_progress = st.progress(0)
-                        for i in range(3):
-                            fog_progress.progress((i + 1) / 3)
+                        for i in range(st.session_state.num_fog_nodes):
+                            fog_progress.progress((i + 1) / st.session_state.num_fog_nodes)
                             time.sleep(0.4)
                         
                         st.success("✅ Fog node aggregation completed")
@@ -428,8 +493,8 @@ def show_training_simulation():
                             'round': st.session_state.current_round + 1,
                             'accuracy': 0.65 + (st.session_state.current_round * 0.03) + np.random.normal(0, 0.01),
                             'loss': 2.5 - (st.session_state.current_round * 0.2) + np.random.normal(0, 0.05),
-                            'privacy_budget': epsilon * (st.session_state.current_round + 1),
-                            'byzantine_detected': np.random.randint(0, int(8 * byzantine_ratio / 100) + 1),
+                            'privacy_budget': st.session_state.epsilon * (st.session_state.current_round + 1),
+                            'byzantine_detected': np.random.randint(0, int(st.session_state.num_healthcare_facilities * byzantine_ratio / 100) + 1),
                             'communication_cost': np.random.uniform(50, 100)
                         }
                         
@@ -491,6 +556,205 @@ def show_training_metrics():
     fig.update_layout(height=600, showlegend=False, title_text="Training Progress Metrics")
     st.plotly_chart(fig, use_container_width=True)
 
+def show_accuracy_loss_graphs():
+    st.header("Accuracy & Loss Graphs")
+    
+    if not st.session_state.metrics_history:
+        st.info("📊 No training data available. Please run the training simulation first to see accuracy and loss graphs.")
+        st.markdown("### How to Generate Data:")
+        st.markdown("""
+        1. Go to **Training Simulation** page
+        2. Configure your training parameters
+        3. Click **Start Training** to begin the federated learning process
+        4. Return here to view detailed accuracy and loss visualizations
+        """)
+        return
+    
+    df_metrics = pd.DataFrame(st.session_state.metrics_history)
+    
+    # Create two columns for side-by-side display
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Model Accuracy Over Time")
+        
+        # Accuracy graph
+        fig_acc = go.Figure()
+        fig_acc.add_trace(go.Scatter(
+            x=df_metrics['round'],
+            y=df_metrics['accuracy'],
+            mode='lines+markers',
+            name='Model Accuracy',
+            line=dict(color='green', width=4),
+            marker=dict(size=10, symbol='circle'),
+            hovertemplate='<b>Round %{x}</b><br>Accuracy: %{y:.3f}<extra></extra>'
+        ))
+        
+        # Add target accuracy line
+        target_accuracy = 0.95
+        fig_acc.add_hline(y=target_accuracy, line_dash="dash", 
+                         line_color="darkgreen", 
+                         annotation_text=f"Target Accuracy ({target_accuracy})")
+        
+        fig_acc.update_layout(
+            title="Federated Learning Model Accuracy",
+            xaxis_title="Training Round",
+            yaxis_title="Accuracy",
+            height=400,
+            yaxis=dict(range=[0.5, 1.0]),
+            showlegend=False
+        )
+        
+        st.plotly_chart(fig_acc, use_container_width=True)
+        
+        # Accuracy statistics
+        st.subheader("Accuracy Statistics")
+        current_accuracy = df_metrics['accuracy'].iloc[-1]
+        max_accuracy = df_metrics['accuracy'].max()
+        accuracy_improvement = current_accuracy - df_metrics['accuracy'].iloc[0] if len(df_metrics) > 1 else 0
+        
+        acc_col1, acc_col2, acc_col3 = st.columns(3)
+        with acc_col1:
+            st.metric("Current Accuracy", f"{current_accuracy:.3f}")
+        with acc_col2:
+            st.metric("Best Accuracy", f"{max_accuracy:.3f}")
+        with acc_col3:
+            st.metric("Improvement", f"{accuracy_improvement:.3f}", delta=f"{accuracy_improvement:.3f}")
+    
+    with col2:
+        st.subheader("Training Loss Over Time")
+        
+        # Loss graph
+        fig_loss = go.Figure()
+        fig_loss.add_trace(go.Scatter(
+            x=df_metrics['round'],
+            y=df_metrics['loss'],
+            mode='lines+markers',
+            name='Training Loss',
+            line=dict(color='red', width=4),
+            marker=dict(size=10, symbol='diamond'),
+            hovertemplate='<b>Round %{x}</b><br>Loss: %{y:.3f}<extra></extra>'
+        ))
+        
+        # Add target loss line
+        target_loss = 0.5
+        fig_loss.add_hline(y=target_loss, line_dash="dash", 
+                          line_color="darkred", 
+                          annotation_text=f"Target Loss ({target_loss})")
+        
+        fig_loss.update_layout(
+            title="Federated Learning Training Loss",
+            xaxis_title="Training Round",
+            yaxis_title="Loss",
+            height=400,
+            showlegend=False
+        )
+        
+        st.plotly_chart(fig_loss, use_container_width=True)
+        
+        # Loss statistics
+        st.subheader("Loss Statistics")
+        current_loss = df_metrics['loss'].iloc[-1]
+        min_loss = df_metrics['loss'].min()
+        loss_reduction = df_metrics['loss'].iloc[0] - current_loss if len(df_metrics) > 1 else 0
+        
+        loss_col1, loss_col2, loss_col3 = st.columns(3)
+        with loss_col1:
+            st.metric("Current Loss", f"{current_loss:.3f}")
+        with loss_col2:
+            st.metric("Best Loss", f"{min_loss:.3f}")
+        with loss_col3:
+            st.metric("Reduction", f"{loss_reduction:.3f}", delta=f"{loss_reduction:.3f}")
+    
+    # Combined accuracy and loss graph
+    st.subheader("Combined Accuracy & Loss Visualization")
+    
+    fig_combined = make_subplots(
+        specs=[[{"secondary_y": True}]], 
+        subplot_titles=["Accuracy and Loss Over Training Rounds"]
+    )
+    
+    # Add accuracy trace
+    fig_combined.add_trace(
+        go.Scatter(
+            x=df_metrics['round'], 
+            y=df_metrics['accuracy'],
+            mode='lines+markers',
+            name='Accuracy',
+            line=dict(color='green', width=3),
+            marker=dict(size=8)
+        ),
+        secondary_y=False
+    )
+    
+    # Add loss trace
+    fig_combined.add_trace(
+        go.Scatter(
+            x=df_metrics['round'], 
+            y=df_metrics['loss'],
+            mode='lines+markers',
+            name='Loss',
+            line=dict(color='red', width=3),
+            marker=dict(size=8)
+        ),
+        secondary_y=True
+    )
+    
+    # Update axis labels
+    fig_combined.update_xaxes(title_text="Training Round")
+    fig_combined.update_yaxes(title_text="Accuracy", secondary_y=False)
+    fig_combined.update_yaxes(title_text="Loss", secondary_y=True)
+    
+    fig_combined.update_layout(
+        title="Federated Learning Progress: Accuracy vs Loss",
+        height=500,
+        hovermode='x unified'
+    )
+    
+    st.plotly_chart(fig_combined, use_container_width=True)
+    
+    # Training convergence analysis
+    st.subheader("Training Convergence Analysis")
+    
+    convergence_col1, convergence_col2 = st.columns(2)
+    
+    with convergence_col1:
+        # Calculate convergence metrics
+        if len(df_metrics) >= 3:
+            recent_acc_change = abs(df_metrics['accuracy'].iloc[-1] - df_metrics['accuracy'].iloc[-3])
+            recent_loss_change = abs(df_metrics['loss'].iloc[-1] - df_metrics['loss'].iloc[-3])
+            
+            if recent_acc_change < 0.01 and recent_loss_change < 0.1:
+                convergence_status = "✅ Converged"
+                convergence_color = "green"
+            elif recent_acc_change < 0.05 and recent_loss_change < 0.3:
+                convergence_status = "🔄 Converging"
+                convergence_color = "orange"
+            else:
+                convergence_status = "📈 Training"
+                convergence_color = "blue"
+        else:
+            convergence_status = "📊 Insufficient Data"
+            convergence_color = "gray"
+        
+        st.markdown(f"**Convergence Status:** <span style='color:{convergence_color}'>{convergence_status}</span>", 
+                   unsafe_allow_html=True)
+        
+        if len(df_metrics) >= 3:
+            st.write(f"Recent accuracy change: {recent_acc_change:.4f}")
+            st.write(f"Recent loss change: {recent_loss_change:.4f}")
+    
+    with convergence_col2:
+        # Training efficiency metrics
+        total_rounds = len(df_metrics)
+        avg_accuracy_per_round = (df_metrics['accuracy'].iloc[-1] - df_metrics['accuracy'].iloc[0]) / total_rounds if total_rounds > 1 else 0
+        avg_loss_reduction_per_round = (df_metrics['loss'].iloc[0] - df_metrics['loss'].iloc[-1]) / total_rounds if total_rounds > 1 else 0
+        
+        st.write(f"**Training Efficiency:**")
+        st.write(f"Rounds completed: {total_rounds}")
+        st.write(f"Avg accuracy gain/round: {avg_accuracy_per_round:.4f}")
+        st.write(f"Avg loss reduction/round: {avg_loss_reduction_per_round:.4f}")
+
 def show_privacy_security_metrics():
     st.header("Privacy & Security Metrics")
     
@@ -547,7 +811,7 @@ def show_privacy_security_metrics():
             # Privacy guarantees table
             privacy_guarantees = {
                 "Parameter": ["Epsilon (ε)", "Delta (δ)", "Sensitivity", "Noise Type"],
-                "Value": ["0.1", "1e-5", "2.0", "Gaussian"],
+                "Value": [str(st.session_state.epsilon), str(st.session_state.delta), "2.0", "Gaussian"],
                 "Description": [
                     "Privacy loss parameter",
                     "Probability of privacy breach",
