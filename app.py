@@ -49,11 +49,17 @@ if 'delta' not in st.session_state:
 def initialize_system():
     """Initialize the federated learning system"""
     if st.session_state.system is None:
-        st.session_state.system = FederatedLearningSystem(
+        system = FederatedLearningSystem(
             num_healthcare_facilities=st.session_state.num_healthcare_facilities,
             num_fog_nodes=st.session_state.num_fog_nodes,
             committee_size=st.session_state.committee_size
         )
+        
+        # Load custom dataset if available
+        if st.session_state.get('use_custom_dataset', False) and 'uploaded_dataset' in st.session_state:
+            system.data_simulator.load_custom_dataset(st.session_state.uploaded_dataset)
+        
+        st.session_state.system = system
     return st.session_state.system
 
 def main():
@@ -108,6 +114,41 @@ def main():
         st.session_state.simulation_started = False
         st.session_state.current_round = 0
         st.session_state.metrics_history = []
+    
+    st.sidebar.markdown("---")
+    
+    # Dataset Configuration
+    st.sidebar.subheader("Dataset Configuration")
+    
+    # File uploader for custom datasets
+    uploaded_file = st.sidebar.file_uploader(
+        "Upload Custom Dataset (CSV)",
+        type=['csv'],
+        help="Upload a CSV file with healthcare data. Should include columns like: age, gender, systolic_bp, diastolic_bp, heart_rate, glucose, etc."
+    )
+    
+    # Store uploaded file in session state
+    if uploaded_file is not None:
+        if 'uploaded_dataset' not in st.session_state or st.session_state.get('uploaded_file_name') != uploaded_file.name:
+            try:
+                # Read the uploaded CSV file
+                custom_data = pd.read_csv(uploaded_file)
+                st.session_state.uploaded_dataset = custom_data
+                st.session_state.uploaded_file_name = uploaded_file.name
+                st.session_state.use_custom_dataset = True
+                st.sidebar.success(f"✅ Dataset loaded: {uploaded_file.name}")
+                st.sidebar.write(f"Shape: {custom_data.shape[0]} patients, {custom_data.shape[1]} features")
+            except Exception as e:
+                st.sidebar.error(f"❌ Error loading dataset: {str(e)}")
+                st.session_state.use_custom_dataset = False
+    else:
+        st.session_state.use_custom_dataset = False
+        if 'uploaded_dataset' in st.session_state:
+            del st.session_state.uploaded_dataset
+    
+    # Option to use simulated data
+    if not st.session_state.get('use_custom_dataset', False):
+        st.sidebar.info("Using simulated healthcare data")
     
     st.sidebar.markdown("---")
     
@@ -176,7 +217,51 @@ def show_system_overview():
         "Last Updated": ["2 min ago", "1 min ago", "30 sec ago", "45 sec ago"]
     }
     
-    st.dataframe(pd.DataFrame(status_data), use_container_width=True)
+    st.dataframe(pd.DataFrame(status_data), width='stretch')
+    
+    # Dataset Information
+    st.subheader("Dataset Information")
+    
+    system = initialize_system()
+    dataset_info = system.data_simulator.get_dataset_info()
+    
+    if dataset_info['type'] == 'custom':
+        st.success("📂 Custom dataset loaded")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Patients", dataset_info['patients'])
+        with col2:
+            st.metric("Features", dataset_info['features'])
+        with col3:
+            age_range = dataset_info.get('age_range', [0, 0])
+            st.metric("Age Range", f"{age_range[0]}-{age_range[1]}")
+        
+        # Show dataset preview
+        if st.button("📊 Show Dataset Preview"):
+            st.subheader("Dataset Sample")
+            if 'uploaded_dataset' in st.session_state:
+                st.dataframe(st.session_state.uploaded_dataset.head(10), width='stretch')
+                
+                # Basic statistics
+                st.subheader("Dataset Statistics")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Numerical Features Summary:**")
+                    numeric_cols = st.session_state.uploaded_dataset.select_dtypes(include=[np.number]).columns
+                    if len(numeric_cols) > 0:
+                        st.dataframe(st.session_state.uploaded_dataset[numeric_cols].describe(), width='stretch')
+                
+                with col2:
+                    st.write("**Categorical Features:**")
+                    categorical_cols = st.session_state.uploaded_dataset.select_dtypes(exclude=[np.number]).columns
+                    if len(categorical_cols) > 0:
+                        for col in categorical_cols[:5]:  # Show first 5 categorical columns
+                            unique_values = st.session_state.uploaded_dataset[col].nunique()
+                            st.write(f"**{col}:** {unique_values} unique values")
+    else:
+        st.info("🔬 Using simulated healthcare data")
+        st.write(f"**Simulated Patients:** {st.session_state.num_healthcare_facilities * 200} (distributed across facilities)")
+        st.write("**Features:** Age, Gender, Vitals, Lab Results, Risk Scores, Medical Conditions")
 
 def show_architecture():
     st.header("System Architecture")

@@ -5,7 +5,7 @@ import random
 from datetime import datetime, timedelta
 
 class HealthcareDataSimulator:
-    """Simulates healthcare data for federated learning experiments"""
+    """Simulates healthcare data for federated learning experiments and handles custom datasets"""
     
     def __init__(self, seed: int = 42):
         np.random.seed(seed)
@@ -13,6 +13,14 @@ class HealthcareDataSimulator:
         self.medical_conditions = [
             'diabetes', 'hypertension', 'heart_disease', 'respiratory_disease',
             'cancer', 'kidney_disease', 'neurological_disorder', 'mental_health'
+        ]
+        self.custom_dataset = None
+        self.required_columns = [
+            'age', 'gender', 'systolic_bp', 'diastolic_bp', 'heart_rate'
+        ]
+        self.optional_columns = [
+            'temperature', 'glucose', 'cholesterol', 'hemoglobin', 'bmi',
+            'smoking', 'exercise_hours', 'primary_condition'
         ]
         
     def generate_patient_data(self, num_patients: int, facility_specialty: str = 'general') -> pd.DataFrame:
@@ -202,26 +210,135 @@ class HealthcareDataSimulator:
         
         return random_date.strftime('%Y-%m-%d %H:%M')
     
+    def load_custom_dataset(self, dataset: pd.DataFrame) -> bool:
+        """Load and validate a custom dataset"""
+        try:
+            # Validate required columns
+            missing_required = [col for col in self.required_columns if col not in dataset.columns]
+            if missing_required:
+                raise ValueError(f"Missing required columns: {missing_required}")
+            
+            # Add patient IDs if not present
+            if 'patient_id' not in dataset.columns:
+                dataset['patient_id'] = [f'P_{i:05d}' for i in range(len(dataset))]
+            
+            # Fill missing optional columns with defaults
+            for col in self.optional_columns:
+                if col not in dataset.columns:
+                    if col == 'temperature':
+                        dataset[col] = 36.5 + np.random.normal(0, 0.5, len(dataset))
+                    elif col == 'glucose':
+                        dataset[col] = 100 + np.random.normal(0, 20, len(dataset))
+                    elif col == 'cholesterol':
+                        dataset[col] = 200 + np.random.normal(0, 30, len(dataset))
+                    elif col == 'hemoglobin':
+                        dataset[col] = 14 + np.random.normal(0, 1.5, len(dataset))
+                    elif col == 'bmi':
+                        dataset[col] = 25 + np.random.normal(0, 4, len(dataset))
+                    elif col == 'smoking':
+                        dataset[col] = np.random.choice([0, 1], len(dataset), p=[0.7, 0.3])
+                    elif col == 'exercise_hours':
+                        dataset[col] = np.random.exponential(3, len(dataset))
+                    elif col == 'primary_condition':
+                        dataset[col] = np.random.choice(self.medical_conditions, len(dataset))
+            
+            # Calculate risk scores if not present
+            if 'cardiovascular_risk' not in dataset.columns:
+                dataset['cardiovascular_risk'] = [
+                    self._calculate_cv_risk(row['age'], row['gender'], row['systolic_bp'], 
+                                          row.get('cholesterol', 200), row.get('smoking', 0))
+                    for _, row in dataset.iterrows()
+                ]
+            
+            if 'diabetes_risk' not in dataset.columns:
+                dataset['diabetes_risk'] = [
+                    self._calculate_diabetes_risk(row['age'], row.get('bmi', 25), row.get('glucose', 100))
+                    for _, row in dataset.iterrows()
+                ]
+            
+            self.custom_dataset = dataset
+            return True
+            
+        except Exception as e:
+            print(f"Error loading custom dataset: {e}")
+            return False
+    
+    def get_dataset_info(self) -> Dict[str, Any]:
+        """Get information about the loaded dataset"""
+        if self.custom_dataset is None:
+            return {"type": "simulated", "patients": 0, "features": 0}
+        
+        return {
+            "type": "custom",
+            "patients": len(self.custom_dataset),
+            "features": len(self.custom_dataset.columns),
+            "columns": list(self.custom_dataset.columns),
+            "conditions": list(self.custom_dataset['primary_condition'].unique()) if 'primary_condition' in self.custom_dataset.columns else [],
+            "age_range": [int(self.custom_dataset['age'].min()), int(self.custom_dataset['age'].max())]
+        }
+    
     def generate_federated_datasets(self, facilities_config: List[Dict[str, Any]]) -> Dict[str, pd.DataFrame]:
-        """Generate datasets for multiple healthcare facilities"""
+        """Generate datasets for multiple healthcare facilities using custom data if available"""
         
         datasets = {}
         
+        if self.custom_dataset is not None:
+            # Use custom dataset - distribute data across facilities
+            return self._distribute_custom_data(facilities_config)
+        else:
+            # Use simulated data
+            for i, config in enumerate(facilities_config):
+                facility_id = config.get('id', f'facility_{i}')
+                num_patients = config.get('num_patients', random.randint(100, 500))
+                specialty = config.get('specialty', 'general')
+                
+                # Add some variation in data distribution
+                data_quality_factor = config.get('data_quality', random.uniform(0.8, 1.0))
+                
+                dataset = self.generate_patient_data(num_patients, specialty)
+                
+                # Simulate data quality variations
+                if data_quality_factor < 1.0:
+                    dataset = self._add_data_quality_issues(dataset, data_quality_factor)
+                
+                datasets[facility_id] = dataset
+        
+        return datasets
+    
+    def _distribute_custom_data(self, facilities_config: List[Dict[str, Any]]) -> Dict[str, pd.DataFrame]:
+        """Distribute custom dataset across healthcare facilities"""
+        datasets = {}
+        total_patients = len(self.custom_dataset)
+        num_facilities = len(facilities_config)
+        
+        # Shuffle the dataset for random distribution
+        shuffled_data = self.custom_dataset.sample(frac=1, random_state=42).reset_index(drop=True)
+        
+        # Calculate base size per facility
+        base_size = total_patients // num_facilities
+        remainder = total_patients % num_facilities
+        
+        start_idx = 0
         for i, config in enumerate(facilities_config):
             facility_id = config.get('id', f'facility_{i}')
-            num_patients = config.get('num_patients', random.randint(100, 500))
-            specialty = config.get('specialty', 'general')
             
-            # Add some variation in data distribution
-            data_quality_factor = config.get('data_quality', random.uniform(0.8, 1.0))
+            # Assign more patients to first few facilities to handle remainder
+            facility_size = base_size + (1 if i < remainder else 0)
             
-            dataset = self.generate_patient_data(num_patients, specialty)
+            # Extract subset of data for this facility
+            end_idx = start_idx + facility_size
+            facility_data = shuffled_data.iloc[start_idx:end_idx].copy()
             
-            # Simulate data quality variations
+            # Reset patient IDs for this facility
+            facility_data['patient_id'] = [f'F{i}_P_{j:05d}' for j in range(len(facility_data))]
+            
+            # Apply data quality variations if specified
+            data_quality_factor = config.get('data_quality', 1.0)
             if data_quality_factor < 1.0:
-                dataset = self._add_data_quality_issues(dataset, data_quality_factor)
+                facility_data = self._add_data_quality_issues(facility_data, data_quality_factor)
             
-            datasets[facility_id] = dataset
+            datasets[facility_id] = facility_data
+            start_idx = end_idx
         
         return datasets
     
