@@ -467,9 +467,14 @@ def show_training_simulation():
                         # Validation phase
                         st.write("👥 **Phase 4**: Committee validation")
                         committee = ValidatorCommittee(committee_size=st.session_state.committee_size)
-                        validation_results = committee.validate_shares([f"share_{i}" for i in range(st.session_state.num_healthcare_facilities)])
+                        validation_approved = committee.validate_shares([f"share_{i}" for i in range(st.session_state.num_healthcare_facilities)])
                         
-                        valid_shares = sum(validation_results)
+                        # Simulate individual share validation results for display
+                        if validation_approved:
+                            valid_shares = max(int(st.session_state.num_healthcare_facilities * 0.85), st.session_state.num_healthcare_facilities - 1)
+                        else:
+                            valid_shares = int(st.session_state.num_healthcare_facilities * 0.6)
+                        
                         st.success(f"✅ Validation completed ({valid_shares}/{st.session_state.num_healthcare_facilities} shares approved)")
                         
                         # Aggregation phase
