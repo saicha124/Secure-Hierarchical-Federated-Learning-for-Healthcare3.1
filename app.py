@@ -824,6 +824,8 @@ def show_accuracy_loss_graphs():
                 convergence_status = "📈 Training"
                 convergence_color = "blue"
         else:
+            recent_acc_change = 0.0
+            recent_loss_change = 0.0
             convergence_status = "📊 Insufficient Data"
             convergence_color = "gray"
         
