@@ -1,6 +1,10 @@
 import numpy as np
 import random
 from typing import List, Dict, Any, Tuple
+import tensorflow as tf
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
 from .crypto_primitives import DifferentialPrivacy, ShamirSecretSharing
 from .byzantine_tolerance import ValidatorCommittee, ProofOfWork
 from .healthcare_data import HealthcareDataSimulator
@@ -8,23 +12,26 @@ from .healthcare_data import HealthcareDataSimulator
 class FederatedLearningSystem:
     """Main federated learning system coordinating all components"""
     
-    def __init__(self, num_healthcare_facilities: int = 8, num_fog_nodes: int = 3, committee_size: int = 5):
+    def __init__(self, num_healthcare_facilities: int = 8, num_fog_nodes: int = 3, committee_size: int = 5, 
+                 model_type: str = "Neural Network", aggregation_method: str = "FedAvg"):
         self.num_healthcare_facilities = num_healthcare_facilities
         self.num_fog_nodes = num_fog_nodes
         self.committee_size = committee_size
+        self.model_type = model_type
+        self.aggregation_method = aggregation_method
         
         # Initialize system components
         self.healthcare_facilities = [
-            HealthcareFacility(f"hc_{i}", self._get_facility_type(i)) 
+            HealthcareFacility(f"hc_{i}", self._get_facility_type(i), model_type) 
             for i in range(num_healthcare_facilities)
         ]
         
         self.fog_nodes = [
-            FogNode(f"fog_{i}") 
+            FogNode(f"fog_{i}", aggregation_method) 
             for i in range(num_fog_nodes)
         ]
         
-        self.leader_server = LeaderServer("leader_server")
+        self.leader_server = LeaderServer("leader_server", aggregation_method)
         self.trusted_authority = TrustedAuthority("trusted_authority")
         
         # Initialize cryptographic components
@@ -46,14 +53,55 @@ class FederatedLearningSystem:
         types = ["hospital", "clinic", "research_center", "emergency_center"]
         return types[index % len(types)]
     
-    def _initialize_global_model(self) -> Dict[str, np.ndarray]:
+    def _create_model(self, model_type: str):
+        """Create model based on type"""
+        if model_type == "Neural Network":
+            model = tf.keras.Sequential([
+                tf.keras.layers.Dense(64, activation='relu', input_shape=(10,)),
+                tf.keras.layers.Dropout(0.2),
+                tf.keras.layers.Dense(32, activation='relu'),
+                tf.keras.layers.Dense(1, activation='sigmoid')
+            ])
+            model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+            return model
+        elif model_type == "CNN":
+            model = tf.keras.Sequential([
+                tf.keras.layers.Reshape((10, 1), input_shape=(10,)),
+                tf.keras.layers.Conv1D(32, 3, activation='relu'),
+                tf.keras.layers.Conv1D(64, 3, activation='relu'),
+                tf.keras.layers.GlobalMaxPooling1D(),
+                tf.keras.layers.Dense(50, activation='relu'),
+                tf.keras.layers.Dense(1, activation='sigmoid')
+            ])
+            model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+            return model
+        elif model_type == "SVM":
+            return SVC(probability=True, random_state=42)
+        elif model_type == "Logistic Regression":
+            return LogisticRegression(random_state=42)
+        elif model_type == "Random Forest":
+            return RandomForestClassifier(n_estimators=100, random_state=42)
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
+    
+    def _initialize_global_model(self) -> Dict[str, Any]:
         """Initialize global model parameters"""
-        return {
-            'weights': np.random.normal(0, 0.01, (10, 1)),
-            'bias': np.zeros((1,)),
-            'accuracy': 0.0,
-            'loss': float('inf')
-        }
+        if self.model_type in ["Neural Network", "CNN"]:
+            model = self._create_model(self.model_type)
+            return {
+                'model': model,
+                'weights': model.get_weights(),
+                'accuracy': 0.0,
+                'loss': float('inf')
+            }
+        else:
+            # For sklearn models, we'll store parameters as dict
+            return {
+                'model_type': self.model_type,
+                'parameters': {},
+                'accuracy': 0.0,
+                'loss': float('inf')
+            }
     
     def register_participant(self, participant_id: str) -> bool:
         """Register a participant using proof-of-work"""
@@ -169,9 +217,10 @@ class FederatedLearningSystem:
 class HealthcareFacility:
     """Represents a healthcare facility participating in federated learning"""
     
-    def __init__(self, facility_id: str, facility_type: str):
+    def __init__(self, facility_id: str, facility_type: str, model_type: str = "Neural Network"):
         self.facility_id = facility_id
         self.facility_type = facility_type
+        self.model_type = model_type
         self.local_data = self._generate_local_data()
         self.local_model = None
         self.reputation_score = random.uniform(0.8, 1.0)
@@ -214,8 +263,9 @@ class HealthcareFacility:
 class FogNode:
     """Represents a fog node performing partial aggregation"""
     
-    def __init__(self, node_id: str):
+    def __init__(self, node_id: str, aggregation_method: str = "FedAvg"):
         self.node_id = node_id
+        self.aggregation_method = aggregation_method
         self.processing_capacity = random.uniform(0.7, 1.0)
         
     def aggregate_updates(self, updates: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -252,8 +302,9 @@ class FogNode:
 class LeaderServer:
     """Represents the leader server performing global aggregation"""
     
-    def __init__(self, server_id: str):
+    def __init__(self, server_id: str, aggregation_method: str = "FedAvg"):
         self.server_id = server_id
+        self.aggregation_method = aggregation_method
         
     def global_aggregation(self, fog_aggregates: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Perform global aggregation of fog node results"""

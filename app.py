@@ -46,13 +46,29 @@ if 'epsilon' not in st.session_state:
 if 'delta' not in st.session_state:
     st.session_state.delta = 1e-5
 
+# New ML configuration parameters
+if 'max_training_rounds' not in st.session_state:
+    st.session_state.max_training_rounds = 10
+if 'aggregation_method' not in st.session_state:
+    st.session_state.aggregation_method = 'FedAvg'
+if 'model_type' not in st.session_state:
+    st.session_state.model_type = 'Neural Network'
+if 'enable_secret_sharing' not in st.session_state:
+    st.session_state.enable_secret_sharing = True
+if 'secret_sharing_threshold' not in st.session_state:
+    st.session_state.secret_sharing_threshold = 3
+if 'secret_sharing_shares' not in st.session_state:
+    st.session_state.secret_sharing_shares = 5
+
 def initialize_system():
     """Initialize the federated learning system"""
     if st.session_state.system is None:
         system = FederatedLearningSystem(
             num_healthcare_facilities=st.session_state.num_healthcare_facilities,
             num_fog_nodes=st.session_state.num_fog_nodes,
-            committee_size=st.session_state.committee_size
+            committee_size=st.session_state.committee_size,
+            model_type=st.session_state.model_type,
+            aggregation_method=st.session_state.aggregation_method
         )
         
         # Load custom dataset if available
@@ -73,11 +89,11 @@ def main():
     st.sidebar.subheader("Network Parameters")
     new_facilities = st.sidebar.number_input(
         "Healthcare Facilities",
-        min_value=2, max_value=20, value=st.session_state.num_healthcare_facilities
+        min_value=3, max_value=20, value=st.session_state.num_healthcare_facilities
     )
     new_fog_nodes = st.sidebar.number_input(
         "Fog Nodes", 
-        min_value=1, max_value=10, value=st.session_state.num_fog_nodes
+        min_value=2, max_value=20, value=st.session_state.num_fog_nodes
     )
     new_committee_size = st.sidebar.number_input(
         "Validator Committee Size",
@@ -95,13 +111,60 @@ def main():
         [1e-3, 1e-4, 1e-5, 1e-6], index=[1e-3, 1e-4, 1e-5, 1e-6].index(st.session_state.delta)
     )
     
+    # Machine Learning Configuration
+    st.sidebar.subheader("ML Configuration")
+    new_model_type = st.sidebar.selectbox(
+        "Model Type",
+        ["Neural Network", "CNN", "SVM", "Logistic Regression", "Random Forest"],
+        index=["Neural Network", "CNN", "SVM", "Logistic Regression", "Random Forest"].index(st.session_state.model_type)
+    )
+    
+    new_max_training_rounds = st.sidebar.slider(
+        "Maximum Training Rounds",
+        min_value=5, max_value=150, value=st.session_state.max_training_rounds, step=5
+    )
+    
+    new_aggregation_method = st.sidebar.selectbox(
+        "Aggregation Method",
+        ["FedAvg", "FedProx"],
+        index=["FedAvg", "FedProx"].index(st.session_state.aggregation_method)
+    )
+    
+    # Secret Sharing Configuration
+    st.sidebar.subheader("Secret Sharing")
+    new_enable_secret_sharing = st.sidebar.checkbox(
+        "Enable Secret Sharing",
+        value=st.session_state.enable_secret_sharing
+    )
+    
+    if new_enable_secret_sharing:
+        new_secret_sharing_threshold = st.sidebar.number_input(
+            "Threshold (t)",
+            min_value=2, max_value=10, value=st.session_state.secret_sharing_threshold,
+            help="Minimum number of shares required to reconstruct the secret"
+        )
+        new_secret_sharing_shares = st.sidebar.number_input(
+            "Total Shares (n)",
+            min_value=3, max_value=15, value=st.session_state.secret_sharing_shares,
+            help="Total number of shares to create"
+        )
+    else:
+        new_secret_sharing_threshold = st.session_state.secret_sharing_threshold
+        new_secret_sharing_shares = st.session_state.secret_sharing_shares
+    
     # Check if parameters changed
     params_changed = (
         new_facilities != st.session_state.num_healthcare_facilities or
         new_fog_nodes != st.session_state.num_fog_nodes or
         new_committee_size != st.session_state.committee_size or
         new_epsilon != st.session_state.epsilon or
-        new_delta != st.session_state.delta
+        new_delta != st.session_state.delta or
+        new_model_type != st.session_state.model_type or
+        new_max_training_rounds != st.session_state.max_training_rounds or
+        new_aggregation_method != st.session_state.aggregation_method or
+        new_enable_secret_sharing != st.session_state.enable_secret_sharing or
+        new_secret_sharing_threshold != st.session_state.secret_sharing_threshold or
+        new_secret_sharing_shares != st.session_state.secret_sharing_shares
     )
     
     if params_changed:
@@ -110,6 +173,12 @@ def main():
         st.session_state.committee_size = new_committee_size
         st.session_state.epsilon = new_epsilon
         st.session_state.delta = new_delta
+        st.session_state.model_type = new_model_type
+        st.session_state.max_training_rounds = new_max_training_rounds
+        st.session_state.aggregation_method = new_aggregation_method
+        st.session_state.enable_secret_sharing = new_enable_secret_sharing
+        st.session_state.secret_sharing_threshold = new_secret_sharing_threshold
+        st.session_state.secret_sharing_shares = new_secret_sharing_shares
         st.session_state.system = None  # Reset system to reinitialize with new params
         st.session_state.simulation_started = False
         st.session_state.current_round = 0
@@ -187,8 +256,7 @@ def show_system_overview():
     
     with col3:
         st.metric("Privacy Guarantee", "ε-DP", f"ε={st.session_state.epsilon}")
-        byzantine_tolerance = f"{int(100/3)}%"
-        st.metric("Byzantine Tolerance", byzantine_tolerance, "Fault tolerant")
+        st.metric("Model Type", st.session_state.model_type, st.session_state.aggregation_method)
     
     st.markdown("---")
     
@@ -485,11 +553,15 @@ def show_training_simulation():
     with col2:
         st.subheader("Training Parameters")
         
+        # Show current ML configuration
+        st.info(f"**Model:** {st.session_state.model_type}\n**Aggregation:** {st.session_state.aggregation_method}\n**Secret Sharing:** {'✅ Enabled' if st.session_state.enable_secret_sharing else '❌ Disabled'}")
+        
         # Training configuration
         epsilon = st.slider("Differential Privacy (ε)", 0.01, 1.0, 0.1, 0.01)
         learning_rate = st.slider("Learning Rate", 0.001, 0.1, 0.01, 0.001)
         local_epochs = st.slider("Local Epochs", 1, 10, 3)
-        global_rounds = st.slider("Global Rounds", 1, 20, 10)
+        global_rounds = st.slider("Global Rounds", 5, st.session_state.max_training_rounds, 
+                                 min(10, st.session_state.max_training_rounds))
         
         byzantine_ratio = st.slider("Byzantine Participants (%)", 0, 30, 12, 1)
         
@@ -539,15 +611,22 @@ def show_training_simulation():
                         st.success(f"✅ Differential privacy applied (avg noise: {avg_noise:.4f})")
                         
                         # Secret sharing phase
-                        st.write("🔑 **Phase 3**: Secret sharing of model updates")
-                        sss = ShamirSecretSharing(threshold=3, num_shares=5)
+                        if st.session_state.enable_secret_sharing:
+                            st.write("🔑 **Phase 3**: Secret sharing of model updates")
+                            sss = ShamirSecretSharing(threshold=st.session_state.secret_sharing_threshold, 
+                                                     num_shares=st.session_state.secret_sharing_shares)
+                        else:
+                            st.write("🔓 **Phase 3**: Direct model update transmission (Secret sharing disabled)")
                         
                         sharing_progress = st.progress(0)
                         for i in range(st.session_state.num_healthcare_facilities):
                             sharing_progress.progress((i + 1) / st.session_state.num_healthcare_facilities)
                             time.sleep(0.2)
                         
-                        st.success("✅ Secret shares distributed")
+                        if st.session_state.enable_secret_sharing:
+                            st.success(f"✅ Secret shares distributed ({st.session_state.secret_sharing_threshold}/{st.session_state.secret_sharing_shares} threshold)")
+                        else:
+                            st.success("✅ Model updates transmitted directly")
                         
                         # Validation phase
                         st.write("👥 **Phase 4**: Committee validation")
@@ -563,7 +642,7 @@ def show_training_simulation():
                         st.success(f"✅ Validation completed ({valid_shares}/{st.session_state.num_healthcare_facilities} shares approved)")
                         
                         # Aggregation phase
-                        st.write("🔄 **Phase 5**: Hierarchical aggregation")
+                        st.write(f"🔄 **Phase 5**: Hierarchical aggregation ({st.session_state.aggregation_method})")
                         
                         # Fog node aggregation
                         fog_progress = st.progress(0)
