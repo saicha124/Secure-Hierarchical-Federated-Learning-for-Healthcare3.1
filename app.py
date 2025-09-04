@@ -556,14 +556,26 @@ def show_training_simulation():
         # Show current ML configuration
         st.info(f"**Model:** {st.session_state.model_type}\n**Aggregation:** {st.session_state.aggregation_method}\n**Secret Sharing:** {'✅ Enabled' if st.session_state.enable_secret_sharing else '❌ Disabled'}")
         
-        # Training configuration
-        epsilon = st.slider("Differential Privacy (ε)", 0.01, 1.0, 0.1, 0.01)
+        # Training configuration (use session state values)
+        epsilon = st.session_state.epsilon
         learning_rate = st.slider("Learning Rate", 0.001, 0.1, 0.01, 0.001)
         local_epochs = st.slider("Local Epochs", 1, 10, 3)
         global_rounds = st.slider("Global Rounds", 5, st.session_state.max_training_rounds, 
                                  min(10, st.session_state.max_training_rounds))
         
         byzantine_ratio = st.slider("Byzantine Participants (%)", 0, 30, 12, 1)
+        
+        # Display current configuration values
+        st.markdown("**Current Configuration:**")
+        st.write(f"• Differential Privacy (ε): {st.session_state.epsilon}")
+        st.write(f"• Delta (δ): {st.session_state.delta}")
+        st.write(f"• Healthcare Facilities: {st.session_state.num_healthcare_facilities}")
+        st.write(f"• Fog Nodes: {st.session_state.num_fog_nodes}")
+        st.write(f"• Committee Size: {st.session_state.committee_size}")
+        if st.session_state.enable_secret_sharing:
+            st.write(f"• Secret Shares: {st.session_state.secret_sharing_shares} (threshold: {st.session_state.secret_sharing_threshold})")
+        else:
+            st.write("• Secret Sharing: Disabled")
         
         start_training = st.button("Start Training", type="primary")
         
@@ -590,13 +602,14 @@ def show_training_simulation():
                         local_progress = st.progress(0)
                         
                         for i in range(st.session_state.num_healthcare_facilities):
+                            progress_pct = int(((i + 1) / st.session_state.num_healthcare_facilities) * 100)
                             local_progress.progress((i + 1) / st.session_state.num_healthcare_facilities)
                             time.sleep(0.3)
                         
-                        st.success("✅ Local training completed")
+                        st.success(f"✅ Local training completed (100% - {st.session_state.num_healthcare_facilities} facilities)")
                         
                         # Differential privacy phase
-                        st.write("🔒 **Phase 2**: Applying differential privacy")
+                        st.write(f"🔒 **Phase 2**: Applying differential privacy (ε={st.session_state.epsilon})")
                         dp_system = DifferentialPrivacy(epsilon=st.session_state.epsilon, delta=st.session_state.delta)
                         
                         privacy_metrics = []
@@ -620,6 +633,7 @@ def show_training_simulation():
                         
                         sharing_progress = st.progress(0)
                         for i in range(st.session_state.num_healthcare_facilities):
+                            progress_pct = int(((i + 1) / st.session_state.num_healthcare_facilities) * 100)
                             sharing_progress.progress((i + 1) / st.session_state.num_healthcare_facilities)
                             time.sleep(0.2)
                         
@@ -629,17 +643,19 @@ def show_training_simulation():
                             st.success("✅ Model updates transmitted directly")
                         
                         # Validation phase
-                        st.write("👥 **Phase 4**: Committee validation")
+                        st.write(f"👥 **Phase 4**: Committee validation ({st.session_state.committee_size} validators)")
                         committee = ValidatorCommittee(committee_size=st.session_state.committee_size)
                         validation_approved = committee.validate_shares([f"share_{i}" for i in range(st.session_state.num_healthcare_facilities)])
                         
                         # Simulate individual share validation results for display
                         if validation_approved:
                             valid_shares = max(int(st.session_state.num_healthcare_facilities * 0.85), st.session_state.num_healthcare_facilities - 1)
+                            validation_pct = int((valid_shares / st.session_state.num_healthcare_facilities) * 100)
                         else:
                             valid_shares = int(st.session_state.num_healthcare_facilities * 0.6)
+                            validation_pct = int((valid_shares / st.session_state.num_healthcare_facilities) * 100)
                         
-                        st.success(f"✅ Validation completed ({valid_shares}/{st.session_state.num_healthcare_facilities} shares approved)")
+                        st.success(f"✅ Validation completed ({valid_shares}/{st.session_state.num_healthcare_facilities} shares approved - {validation_pct}%)")
                         
                         # Aggregation phase
                         st.write(f"🔄 **Phase 5**: Hierarchical aggregation ({st.session_state.aggregation_method})")
@@ -647,10 +663,11 @@ def show_training_simulation():
                         # Fog node aggregation
                         fog_progress = st.progress(0)
                         for i in range(st.session_state.num_fog_nodes):
+                            progress_pct = int(((i + 1) / st.session_state.num_fog_nodes) * 100)
                             fog_progress.progress((i + 1) / st.session_state.num_fog_nodes)
                             time.sleep(0.4)
                         
-                        st.success("✅ Fog node aggregation completed")
+                        st.success(f"✅ Fog node aggregation completed (100% - {st.session_state.num_fog_nodes} fog nodes)")
                         
                         # Global aggregation
                         st.write("🌐 **Phase 6**: Global aggregation at leader server")
