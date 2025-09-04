@@ -52,7 +52,7 @@ if 'max_training_rounds' not in st.session_state:
 if 'aggregation_method' not in st.session_state:
     st.session_state.aggregation_method = 'FedAvg'
 if 'model_type' not in st.session_state:
-    st.session_state.model_type = 'Neural Network'
+    st.session_state.model_type = 'Neural Network (Deep Learning)'
 if 'enable_secret_sharing' not in st.session_state:
     st.session_state.enable_secret_sharing = True
 if 'secret_sharing_threshold' not in st.session_state:
@@ -71,6 +71,17 @@ if 'dataset_info' not in st.session_state:
     st.session_state.dataset_info = {}
 if 'current_dataset' not in st.session_state:
     st.session_state.current_dataset = None
+
+def extract_model_type(display_name: str) -> str:
+    """Extract the base model type from display name with parentheses"""
+    model_mapping = {
+        'Neural Network (Deep Learning)': 'Neural Network',
+        'CNN (Convolutional Neural Network)': 'CNN',
+        'SVM (Support Vector Machine)': 'SVM',
+        'Logistic Regression (Linear Model)': 'Logistic Regression',
+        'Random Forest (Ensemble)': 'Random Forest'
+    }
+    return model_mapping.get(display_name, display_name.split(' (')[0])
 
 def load_selected_dataset():
     """Load the selected dataset and cache it"""
@@ -170,7 +181,7 @@ def initialize_system():
             num_healthcare_facilities=st.session_state.num_healthcare_facilities,
             num_fog_nodes=st.session_state.num_fog_nodes,
             committee_size=st.session_state.committee_size,
-            model_type=st.session_state.model_type,
+            model_type=extract_model_type(st.session_state.model_type),
             aggregation_method=st.session_state.aggregation_method
         )
         
@@ -214,8 +225,8 @@ def main():
     st.sidebar.subheader("ML Configuration")
     new_model_type = st.sidebar.selectbox(
         "Model Type",
-        ["Neural Network", "CNN", "SVM", "Logistic Regression", "Random Forest"],
-        index=["Neural Network", "CNN", "SVM", "Logistic Regression", "Random Forest"].index(st.session_state.model_type)
+        ["Neural Network (Deep Learning)", "CNN (Convolutional Neural Network)", "SVM (Support Vector Machine)", "Logistic Regression (Linear Model)", "Random Forest (Ensemble)"],
+        index=["Neural Network (Deep Learning)", "CNN (Convolutional Neural Network)", "SVM (Support Vector Machine)", "Logistic Regression (Linear Model)", "Random Forest (Ensemble)"].index(st.session_state.model_type)
     )
     
     new_max_training_rounds = st.sidebar.slider(
@@ -319,42 +330,6 @@ def main():
     if st.session_state.dataset_choice != "Synthetic Healthcare Data":
         load_selected_dataset()
     
-    st.sidebar.markdown("---")
-    
-    # Dataset Configuration
-    st.sidebar.subheader("Dataset Configuration")
-    
-    # File uploader for custom datasets
-    uploaded_file = st.sidebar.file_uploader(
-        "Upload Custom Dataset (CSV)",
-        type=['csv'],
-        help="Upload a CSV file with healthcare data. Should include columns like: age, gender, systolic_bp, diastolic_bp, heart_rate, glucose, etc."
-    )
-    
-    # Store uploaded file in session state
-    if uploaded_file is not None:
-        if 'uploaded_dataset' not in st.session_state or st.session_state.get('uploaded_file_name') != uploaded_file.name:
-            try:
-                # Read the uploaded CSV file
-                custom_data = pd.read_csv(uploaded_file)
-                st.session_state.uploaded_dataset = custom_data
-                st.session_state.uploaded_file_name = uploaded_file.name
-                st.session_state.use_custom_dataset = True
-                st.sidebar.success(f"✅ Dataset loaded: {uploaded_file.name}")
-                st.sidebar.write(f"Shape: {custom_data.shape[0]} patients, {custom_data.shape[1]} features")
-            except Exception as e:
-                st.sidebar.error(f"❌ Error loading dataset: {str(e)}")
-                st.session_state.use_custom_dataset = False
-    else:
-        st.session_state.use_custom_dataset = False
-        if 'uploaded_dataset' in st.session_state:
-            del st.session_state.uploaded_dataset
-    
-    # Option to use simulated data
-    if not st.session_state.get('use_custom_dataset', False):
-        st.sidebar.info("Using simulated healthcare data")
-    
-    st.sidebar.markdown("---")
     
     # Navigation
     st.sidebar.title("Navigation")
