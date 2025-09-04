@@ -138,14 +138,14 @@ def main():
     )
     
     if new_enable_secret_sharing:
-        # Automatically set shares to match number of facilities
-        new_secret_sharing_shares = new_facilities
-        st.sidebar.info(f"Shares set to match facilities: {new_secret_sharing_shares}")
+        # Automatically set shares to match number of fog nodes
+        new_secret_sharing_shares = new_fog_nodes
+        st.sidebar.info(f"Shares set to match fog nodes: {new_secret_sharing_shares}")
         
         new_secret_sharing_threshold = st.sidebar.number_input(
             "Threshold (t)",
-            min_value=2, max_value=new_facilities, 
-            value=min(st.session_state.secret_sharing_threshold, new_facilities),
+            min_value=2, max_value=new_fog_nodes, 
+            value=min(st.session_state.secret_sharing_threshold, new_fog_nodes),
             help="Minimum number of shares required to reconstruct the secret"
         )
     else:
