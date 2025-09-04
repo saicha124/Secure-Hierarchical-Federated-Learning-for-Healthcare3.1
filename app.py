@@ -594,32 +594,52 @@ def show_training_simulation():
             with progress_container:
                 st.subheader(f"Training Progress - Round {st.session_state.current_round + 1}/{global_rounds}")
                 
+                # Overall progress across all rounds
+                overall_progress = st.progress(0)
+                overall_text = st.empty()
+                overall_pct = int(((st.session_state.current_round) / global_rounds) * 100)
+                overall_progress.progress(st.session_state.current_round / global_rounds)
+                overall_text.text(f"Overall Training Progress: Round {st.session_state.current_round}/{global_rounds} ({overall_pct}%)")
+                
+                st.markdown("---")
+                
                 if st.session_state.current_round < global_rounds:
                     # Simulate training round
                     with st.spinner("Training in progress..."):
                         # Local training phase
                         st.write("📱 **Phase 1**: Local model training at healthcare facilities")
                         local_progress = st.progress(0)
+                        progress_text = st.empty()
                         
                         for i in range(st.session_state.num_healthcare_facilities):
                             progress_pct = int(((i + 1) / st.session_state.num_healthcare_facilities) * 100)
                             local_progress.progress((i + 1) / st.session_state.num_healthcare_facilities)
+                            progress_text.text(f"Training facility {i + 1}/{st.session_state.num_healthcare_facilities} ({progress_pct}%)")
                             time.sleep(0.3)
                         
+                        progress_text.text("")
                         st.success(f"✅ Local training completed (100% - {st.session_state.num_healthcare_facilities} facilities)")
                         
                         # Differential privacy phase
                         st.write(f"🔒 **Phase 2**: Applying differential privacy (ε={st.session_state.epsilon})")
                         dp_system = DifferentialPrivacy(epsilon=st.session_state.epsilon, delta=st.session_state.delta)
+                        dp_progress = st.progress(0)
+                        dp_text = st.empty()
                         
                         privacy_metrics = []
                         for i in range(st.session_state.num_healthcare_facilities):
+                            progress_pct = int(((i + 1) / st.session_state.num_healthcare_facilities) * 100)
+                            dp_progress.progress((i + 1) / st.session_state.num_healthcare_facilities)
+                            dp_text.text(f"Applying noise to facility {i + 1}/{st.session_state.num_healthcare_facilities} ({progress_pct}%)")
+                            
                             # Simulate gradient with noise
                             original_grad = np.random.normal(0, 1, 10)
                             noisy_grad = dp_system.add_noise(original_grad)
                             noise_level = np.std(noisy_grad - original_grad)
                             privacy_metrics.append(noise_level)
+                            time.sleep(0.2)
                         
+                        dp_text.text("")
                         avg_noise = np.mean(privacy_metrics)
                         st.success(f"✅ Differential privacy applied (avg noise: {avg_noise:.4f})")
                         
@@ -632,10 +652,18 @@ def show_training_simulation():
                             st.write("🔓 **Phase 3**: Direct model update transmission (Secret sharing disabled)")
                         
                         sharing_progress = st.progress(0)
+                        sharing_text = st.empty()
+                        
                         for i in range(st.session_state.num_healthcare_facilities):
                             progress_pct = int(((i + 1) / st.session_state.num_healthcare_facilities) * 100)
                             sharing_progress.progress((i + 1) / st.session_state.num_healthcare_facilities)
+                            if st.session_state.enable_secret_sharing:
+                                sharing_text.text(f"Creating shares for facility {i + 1}/{st.session_state.num_healthcare_facilities} ({progress_pct}%)")
+                            else:
+                                sharing_text.text(f"Transmitting updates from facility {i + 1}/{st.session_state.num_healthcare_facilities} ({progress_pct}%)")
                             time.sleep(0.2)
+                        
+                        sharing_text.text("")
                         
                         if st.session_state.enable_secret_sharing:
                             st.success(f"✅ Secret shares distributed ({st.session_state.secret_sharing_threshold}/{st.session_state.secret_sharing_shares} threshold)")
@@ -645,6 +673,17 @@ def show_training_simulation():
                         # Validation phase
                         st.write(f"👥 **Phase 4**: Committee validation ({st.session_state.committee_size} validators)")
                         committee = ValidatorCommittee(committee_size=st.session_state.committee_size)
+                        
+                        validation_progress = st.progress(0)
+                        validation_text = st.empty()
+                        
+                        for i in range(st.session_state.committee_size):
+                            progress_pct = int(((i + 1) / st.session_state.committee_size) * 100)
+                            validation_progress.progress((i + 1) / st.session_state.committee_size)
+                            validation_text.text(f"Validator {i + 1}/{st.session_state.committee_size} checking shares ({progress_pct}%)")
+                            time.sleep(0.3)
+                        
+                        validation_text.text("")
                         validation_approved = committee.validate_shares([f"share_{i}" for i in range(st.session_state.num_healthcare_facilities)])
                         
                         # Simulate individual share validation results for display
@@ -662,17 +701,32 @@ def show_training_simulation():
                         
                         # Fog node aggregation
                         fog_progress = st.progress(0)
+                        fog_text = st.empty()
+                        
                         for i in range(st.session_state.num_fog_nodes):
                             progress_pct = int(((i + 1) / st.session_state.num_fog_nodes) * 100)
                             fog_progress.progress((i + 1) / st.session_state.num_fog_nodes)
+                            fog_text.text(f"Aggregating at fog node {i + 1}/{st.session_state.num_fog_nodes} ({progress_pct}%) - Method: {st.session_state.aggregation_method}")
                             time.sleep(0.4)
                         
+                        fog_text.text("")
                         st.success(f"✅ Fog node aggregation completed (100% - {st.session_state.num_fog_nodes} fog nodes)")
                         
                         # Global aggregation
                         st.write("🌐 **Phase 6**: Global aggregation at leader server")
-                        time.sleep(1)
-                        st.success("✅ Global model updated")
+                        global_progress = st.progress(0)
+                        global_text = st.empty()
+                        
+                        # Simulate global aggregation steps
+                        steps = ["Collecting fog node updates", "Applying global aggregation", "Validating global model", "Broadcasting updated model"]
+                        for i, step in enumerate(steps):
+                            progress_pct = int(((i + 1) / len(steps)) * 100)
+                            global_progress.progress((i + 1) / len(steps))
+                            global_text.text(f"{step} ({progress_pct}%)")
+                            time.sleep(0.5)
+                        
+                        global_text.text("")
+                        st.success("✅ Global model updated (100%)")
                         
                         # Record metrics
                         round_metrics = {
@@ -691,6 +745,10 @@ def show_training_simulation():
                             time.sleep(1)
                             st.rerun()
                         else:
+                            # Update overall progress to 100% when completed
+                            overall_progress.progress(1.0)
+                            overall_text.text(f"Overall Training Progress: Completed {global_rounds}/{global_rounds} (100%)")
+                            
                             st.success("🎉 Training completed!")
                             st.balloons()
         
