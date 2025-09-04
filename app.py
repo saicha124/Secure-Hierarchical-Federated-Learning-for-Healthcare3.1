@@ -14,7 +14,7 @@ import json
 from core.federated_learning import FederatedLearningSystem
 from core.crypto_primitives import DifferentialPrivacy, ShamirSecretSharing
 from core.byzantine_tolerance import ValidatorCommittee, ProofOfWork
-from core.healthcare_data import HealthcareDataSimulator
+from core.healthcare_data import HealthcareDataSimulator, StandardDatasetLoader
 from utils.visualization import SystemArchitectureViz, MetricsViz
 
 # Page configuration
@@ -60,6 +60,109 @@ if 'secret_sharing_threshold' not in st.session_state:
 if 'secret_sharing_shares' not in st.session_state:
     st.session_state.secret_sharing_shares = 5
 
+# Dataset selection state
+if 'dataset_choice' not in st.session_state:
+    st.session_state.dataset_choice = "Synthetic Healthcare Data"
+if 'uploaded_file' not in st.session_state:
+    st.session_state.uploaded_file = None
+if 'dataset_loaded' not in st.session_state:
+    st.session_state.dataset_loaded = False
+if 'dataset_info' not in st.session_state:
+    st.session_state.dataset_info = {}
+if 'current_dataset' not in st.session_state:
+    st.session_state.current_dataset = None
+
+def load_selected_dataset():
+    """Load the selected dataset and cache it"""
+    if st.session_state.dataset_choice == "Synthetic Healthcare Data":
+        # Use existing synthetic data generation
+        st.session_state.dataset_info = {
+            "type": "synthetic", 
+            "name": "Synthetic Healthcare Data",
+            "samples": "Variable by facility",
+            "features": "Healthcare metrics"
+        }
+        st.session_state.dataset_loaded = True
+        return True
+        
+    elif st.session_state.dataset_choice == "MNIST Dataset":
+        if not st.session_state.dataset_loaded or st.session_state.current_dataset != "mnist":
+            try:
+                with st.spinner("Loading MNIST dataset..."):
+                    loader = StandardDatasetLoader()
+                    x_train, y_train, x_test, y_test = loader.load_mnist()
+                    
+                    # Store dataset info
+                    st.session_state.dataset_info = {
+                        "type": "mnist",
+                        "name": "MNIST",
+                        "train_samples": len(x_train),
+                        "test_samples": len(x_test),
+                        "image_shape": x_train.shape[1:],
+                        "num_classes": len(np.unique(y_train))
+                    }
+                    st.session_state.current_dataset = "mnist"
+                    st.session_state.dataset_loaded = True
+                    return True
+            except Exception as e:
+                st.error(f"Error loading MNIST: {e}")
+                return False
+                
+    elif st.session_state.dataset_choice == "CIFAR-10 Dataset":
+        if not st.session_state.dataset_loaded or st.session_state.current_dataset != "cifar10":
+            try:
+                with st.spinner("Loading CIFAR-10 dataset..."):
+                    loader = StandardDatasetLoader()
+                    x_train, y_train, x_test, y_test = loader.load_cifar10()
+                    
+                    # Store dataset info
+                    st.session_state.dataset_info = {
+                        "type": "cifar10",
+                        "name": "CIFAR-10",
+                        "train_samples": len(x_train),
+                        "test_samples": len(x_test),
+                        "image_shape": x_train.shape[1:],
+                        "num_classes": len(np.unique(y_train))
+                    }
+                    st.session_state.current_dataset = "cifar10"
+                    st.session_state.dataset_loaded = True
+                    return True
+            except Exception as e:
+                st.error(f"Error loading CIFAR-10: {e}")
+                return False
+                
+    elif st.session_state.dataset_choice == "Upload Custom Dataset":
+        if st.session_state.uploaded_file is not None:
+            try:
+                with st.spinner("Processing uploaded file..."):
+                    loader = StandardDatasetLoader()
+                    file_extension = st.session_state.uploaded_file.name.split('.')[-1]
+                    result = loader.load_custom_file(st.session_state.uploaded_file, file_extension)
+                    
+                    if result is not None:
+                        X, y = result
+                        st.session_state.dataset_info = {
+                            "type": "custom",
+                            "name": st.session_state.uploaded_file.name,
+                            "samples": len(X),
+                            "features": X.shape[1] if len(X.shape) > 1 else 1,
+                            "num_classes": len(np.unique(y))
+                        }
+                        st.session_state.current_dataset = "custom"
+                        st.session_state.dataset_loaded = True
+                        return True
+                    else:
+                        st.error("Failed to load uploaded file")
+                        return False
+            except Exception as e:
+                st.error(f"Error processing uploaded file: {e}")
+                return False
+        else:
+            st.warning("Please upload a file first")
+            return False
+    
+    return False
+
 def initialize_system():
     """Initialize the federated learning system"""
     if st.session_state.system is None:
@@ -70,10 +173,6 @@ def initialize_system():
             model_type=st.session_state.model_type,
             aggregation_method=st.session_state.aggregation_method
         )
-        
-        # Load custom dataset if available
-        if st.session_state.get('use_custom_dataset', False) and 'uploaded_dataset' in st.session_state:
-            system.data_simulator.load_custom_dataset(st.session_state.uploaded_dataset)
         
         st.session_state.system = system
     return st.session_state.system
@@ -130,6 +229,34 @@ def main():
         index=["FedAvg", "FedProx"].index(st.session_state.aggregation_method)
     )
     
+    # Dataset Configuration
+    st.sidebar.subheader("Dataset Selection")
+    dataset_options = ["Synthetic Healthcare Data", "Upload Custom Dataset", "MNIST Dataset", "CIFAR-10 Dataset"]
+    new_dataset_choice = st.sidebar.selectbox(
+        "Choose Dataset",
+        dataset_options,
+        index=dataset_options.index(st.session_state.get('dataset_choice', 'Synthetic Healthcare Data'))
+    )
+    
+    # File upload for custom dataset
+    uploaded_file = None
+    if new_dataset_choice == "Upload Custom Dataset":
+        uploaded_file = st.sidebar.file_uploader(
+            "Upload Dataset File", 
+            type=['csv', 'json', 'pkl', 'npy'],
+            help="Supported formats: CSV, JSON, Pickle, NumPy"
+        )
+        if uploaded_file is not None:
+            st.sidebar.success(f"File uploaded: {uploaded_file.name}")
+    
+    # Dataset info display
+    if new_dataset_choice == "MNIST Dataset":
+        st.sidebar.info("📊 MNIST: 60,000 training + 10,000 test images\n28x28 grayscale digits (0-9)")
+    elif new_dataset_choice == "CIFAR-10 Dataset":
+        st.sidebar.info("📊 CIFAR-10: 50,000 training + 10,000 test images\n32x32 color images, 10 classes")
+    elif new_dataset_choice == "Synthetic Healthcare Data":
+        st.sidebar.info("📊 Synthetic: Generated healthcare facility data\nConfigurable facility types and patient records")
+
     # Secret Sharing Configuration
     st.sidebar.subheader("Secret Sharing")
     new_enable_secret_sharing = st.sidebar.checkbox(
@@ -164,7 +291,8 @@ def main():
         new_aggregation_method != st.session_state.aggregation_method or
         new_enable_secret_sharing != st.session_state.enable_secret_sharing or
         new_secret_sharing_threshold != st.session_state.secret_sharing_threshold or
-        new_secret_sharing_shares != st.session_state.secret_sharing_shares
+        new_secret_sharing_shares != st.session_state.secret_sharing_shares or
+        new_dataset_choice != st.session_state.get('dataset_choice', 'Synthetic Healthcare Data')
     )
     
     if params_changed:
@@ -179,10 +307,17 @@ def main():
         st.session_state.enable_secret_sharing = new_enable_secret_sharing
         st.session_state.secret_sharing_threshold = new_secret_sharing_threshold
         st.session_state.secret_sharing_shares = new_secret_sharing_shares
+        st.session_state.dataset_choice = new_dataset_choice
+        st.session_state.uploaded_file = uploaded_file
         st.session_state.system = None  # Reset system to reinitialize with new params
         st.session_state.simulation_started = False
         st.session_state.current_round = 0
         st.session_state.metrics_history = []
+        st.session_state.dataset_loaded = False  # Reset dataset loading
+    
+    # Load the selected dataset
+    if st.session_state.dataset_choice != "Synthetic Healthcare Data":
+        load_selected_dataset()
     
     st.sidebar.markdown("---")
     
@@ -554,7 +689,14 @@ def show_training_simulation():
         st.subheader("Training Parameters")
         
         # Show current ML configuration
-        st.info(f"**Model:** {st.session_state.model_type}\n**Aggregation:** {st.session_state.aggregation_method}\n**Secret Sharing:** {'✅ Enabled' if st.session_state.enable_secret_sharing else '❌ Disabled'}")
+        dataset_info = st.session_state.dataset_info
+        dataset_text = f"**Dataset:** {dataset_info.get('name', 'Not loaded')}"
+        if 'train_samples' in dataset_info:
+            dataset_text += f"\n**Samples:** {dataset_info['train_samples']:,} training"
+        elif 'samples' in dataset_info:
+            dataset_text += f"\n**Samples:** {dataset_info['samples']}"
+        
+        st.info(f"**Model:** {st.session_state.model_type}\n**Aggregation:** {st.session_state.aggregation_method}\n**Secret Sharing:** {'✅ Enabled' if st.session_state.enable_secret_sharing else '❌ Disabled'}\n{dataset_text}")
         
         # Training configuration (use session state values)
         epsilon = st.session_state.epsilon

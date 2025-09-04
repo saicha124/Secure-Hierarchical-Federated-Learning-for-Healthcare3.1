@@ -1,8 +1,15 @@
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional, Union
 import random
+import io
+import json
+import pickle
 from datetime import datetime, timedelta
+import tensorflow as tf
+from tensorflow.keras.datasets import mnist, cifar10
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 
 class HealthcareDataSimulator:
     """Simulates healthcare data for federated learning experiments and handles custom datasets"""
@@ -509,3 +516,241 @@ class PrivacyPreservingDataProcessor:
                 )
         
         return processed_dataset
+
+
+class StandardDatasetLoader:
+    """Handles loading and preprocessing of standard ML datasets (MNIST, CIFAR-10) for federated learning"""
+    
+    def __init__(self):
+        self.dataset_info = {
+            'mnist': {
+                'name': 'MNIST',
+                'description': 'Handwritten digits (0-9)',
+                'train_samples': 60000,
+                'test_samples': 10000,
+                'image_shape': (28, 28, 1),
+                'num_classes': 10
+            },
+            'cifar10': {
+                'name': 'CIFAR-10',
+                'description': '32x32 color images in 10 classes',
+                'train_samples': 50000,
+                'test_samples': 10000,
+                'image_shape': (32, 32, 3),
+                'num_classes': 10
+            }
+        }
+    
+    def load_mnist(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Load and preprocess MNIST dataset"""
+        print("Loading MNIST dataset...")
+        (x_train, y_train), (x_test, y_test) = mnist.load_data()
+        
+        # Normalize pixel values
+        x_train = x_train.astype('float32') / 255.0
+        x_test = x_test.astype('float32') / 255.0
+        
+        # Reshape for consistency (add channel dimension)
+        x_train = x_train.reshape(x_train.shape[0], 28, 28, 1)
+        x_test = x_test.reshape(x_test.shape[0], 28, 28, 1)
+        
+        print(f"MNIST loaded: {x_train.shape[0]} training, {x_test.shape[0]} test samples")
+        return x_train, y_train, x_test, y_test
+    
+    def load_cifar10(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Load and preprocess CIFAR-10 dataset"""
+        print("Loading CIFAR-10 dataset...")
+        (x_train, y_train), (x_test, y_test) = cifar10.load_data()
+        
+        # Normalize pixel values
+        x_train = x_train.astype('float32') / 255.0
+        x_test = x_test.astype('float32') / 255.0
+        
+        # Flatten labels
+        y_train = y_train.flatten()
+        y_test = y_test.flatten()
+        
+        print(f"CIFAR-10 loaded: {x_train.shape[0]} training, {x_test.shape[0]} test samples")
+        return x_train, y_train, x_test, y_test
+    
+    def distribute_dataset_federated(self, x_data: np.ndarray, y_data: np.ndarray, 
+                                   num_facilities: int, distribution_type: str = 'iid') -> List[Tuple[np.ndarray, np.ndarray]]:
+        """Distribute dataset across facilities for federated learning"""
+        
+        if distribution_type == 'iid':
+            return self._distribute_iid(x_data, y_data, num_facilities)
+        elif distribution_type == 'non_iid':
+            return self._distribute_non_iid(x_data, y_data, num_facilities)
+        else:
+            raise ValueError(f"Unknown distribution type: {distribution_type}")
+    
+    def _distribute_iid(self, x_data: np.ndarray, y_data: np.ndarray, 
+                       num_facilities: int) -> List[Tuple[np.ndarray, np.ndarray]]:
+        """Distribute data in IID manner across facilities"""
+        
+        # Shuffle data
+        indices = np.random.permutation(len(x_data))
+        x_shuffled = x_data[indices]
+        y_shuffled = y_data[indices]
+        
+        # Split into roughly equal parts
+        facility_datasets = []
+        samples_per_facility = len(x_data) // num_facilities
+        
+        for i in range(num_facilities):
+            start_idx = i * samples_per_facility
+            if i == num_facilities - 1:  # Last facility gets remaining samples
+                end_idx = len(x_data)
+            else:
+                end_idx = (i + 1) * samples_per_facility
+            
+            facility_x = x_shuffled[start_idx:end_idx]
+            facility_y = y_shuffled[start_idx:end_idx]
+            facility_datasets.append((facility_x, facility_y))
+        
+        print(f"Distributed {len(x_data)} samples across {num_facilities} facilities (IID)")
+        return facility_datasets
+    
+    def _distribute_non_iid(self, x_data: np.ndarray, y_data: np.ndarray, 
+                           num_facilities: int, classes_per_facility: int = 2) -> List[Tuple[np.ndarray, np.ndarray]]:
+        """Distribute data in non-IID manner (each facility gets limited classes)"""
+        
+        num_classes = len(np.unique(y_data))
+        facility_datasets = []
+        
+        # Group data by class
+        class_indices = {}
+        for class_id in range(num_classes):
+            class_indices[class_id] = np.where(y_data == class_id)[0]
+            np.random.shuffle(class_indices[class_id])
+        
+        # Assign classes to facilities
+        facility_classes = []
+        for i in range(num_facilities):
+            # Each facility gets a subset of classes
+            start_class = (i * classes_per_facility) % num_classes
+            facility_class_list = []
+            for j in range(classes_per_facility):
+                class_id = (start_class + j) % num_classes
+                facility_class_list.append(class_id)
+            facility_classes.append(facility_class_list)
+        
+        # Distribute samples for each facility
+        for facility_id, classes in enumerate(facility_classes):
+            facility_x_list = []
+            facility_y_list = []
+            
+            for class_id in classes:
+                # Get samples for this class
+                class_samples = class_indices[class_id]
+                samples_per_class = len(class_samples) // num_facilities
+                
+                start_idx = facility_id * samples_per_class
+                if facility_id == num_facilities - 1:
+                    end_idx = len(class_samples)
+                else:
+                    end_idx = (facility_id + 1) * samples_per_class
+                
+                selected_indices = class_samples[start_idx:end_idx]
+                facility_x_list.append(x_data[selected_indices])
+                facility_y_list.append(y_data[selected_indices])
+            
+            # Combine all samples for this facility
+            if facility_x_list:
+                facility_x = np.concatenate(facility_x_list, axis=0)
+                facility_y = np.concatenate(facility_y_list, axis=0)
+                
+                # Shuffle facility data
+                shuffle_indices = np.random.permutation(len(facility_x))
+                facility_x = facility_x[shuffle_indices]
+                facility_y = facility_y[shuffle_indices]
+                
+                facility_datasets.append((facility_x, facility_y))
+            else:
+                # Handle edge case with empty facility
+                facility_datasets.append((np.array([]), np.array([])))
+        
+        print(f"Distributed {len(x_data)} samples across {num_facilities} facilities (Non-IID, {classes_per_facility} classes per facility)")
+        return facility_datasets
+    
+    def prepare_for_ml_models(self, x_data: np.ndarray, y_data: np.ndarray, 
+                             model_type: str) -> Tuple[np.ndarray, np.ndarray]:
+        """Prepare data based on ML model type"""
+        
+        if model_type in ["Neural Network", "SVM", "Logistic Regression", "Random Forest"]:
+            # Flatten images for traditional ML models
+            if len(x_data.shape) > 2:
+                x_flattened = x_data.reshape(x_data.shape[0], -1)
+            else:
+                x_flattened = x_data
+            
+            # For traditional ML, we might want to reduce dimensionality
+            if x_flattened.shape[1] > 1000:  # If too many features, apply PCA or sampling
+                # Simple feature sampling for demonstration
+                step = x_flattened.shape[1] // 100  # Reduce to ~100 features
+                x_reduced = x_flattened[:, ::step]
+                return x_reduced, y_data
+            
+            return x_flattened, y_data
+            
+        elif model_type == "CNN":
+            # Keep original shape for CNN
+            return x_data, y_data
+        
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
+    
+    def get_dataset_info(self, dataset_name: str) -> Dict[str, Any]:
+        """Get information about a standard dataset"""
+        return self.dataset_info.get(dataset_name.lower(), {})
+    
+    def load_custom_file(self, uploaded_file, file_type: str) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+        """Load data from uploaded file"""
+        try:
+            if file_type == 'csv':
+                df = pd.read_csv(uploaded_file)
+                # Assume last column is labels, rest are features
+                if len(df.columns) < 2:
+                    raise ValueError("CSV must have at least 2 columns (features and labels)")
+                
+                X = df.iloc[:, :-1].values
+                y = df.iloc[:, -1].values
+                
+                # Convert labels to numeric if needed
+                if y.dtype == 'object':
+                    le = LabelEncoder()
+                    y = le.fit_transform(y)
+                
+                return X.astype(float), y
+                
+            elif file_type == 'json':
+                data = json.load(uploaded_file)
+                if 'X' in data and 'y' in data:
+                    return np.array(data['X']), np.array(data['y'])
+                else:
+                    raise ValueError("JSON must contain 'X' and 'y' keys")
+                    
+            elif file_type == 'pkl':
+                data = pickle.load(uploaded_file)
+                if isinstance(data, tuple) and len(data) == 2:
+                    return np.array(data[0]), np.array(data[1])
+                elif isinstance(data, dict) and 'X' in data and 'y' in data:
+                    return np.array(data['X']), np.array(data['y'])
+                else:
+                    raise ValueError("Pickle file must contain (X, y) tuple or {'X': ..., 'y': ...} dict")
+                    
+            elif file_type == 'npy':
+                # Assume it's a single array with features and labels concatenated
+                data = np.load(uploaded_file)
+                if len(data.shape) != 2:
+                    raise ValueError("NumPy file must be 2D array")
+                X = data[:, :-1]
+                y = data[:, -1]
+                return X, y
+                
+            else:
+                raise ValueError(f"Unsupported file type: {file_type}")
+                
+        except Exception as e:
+            print(f"Error loading file: {e}")
+            return None
