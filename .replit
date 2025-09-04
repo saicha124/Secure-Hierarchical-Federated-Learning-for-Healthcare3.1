@@ -6,7 +6,7 @@ packages = ["cargo", "glibcLocales", "libiconv", "libxcrypt", "openssl", "pkg-co
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["streamlit", "run", "app.py", "--server.port", "5000"]
+run = ["uv", "run", "streamlit", "run", "app.py", "--server.port", "5000", "--server.headless", "true"]
 
 [workflows]
 runButton = "Project"
@@ -24,13 +24,13 @@ args = "Streamlit App"
 name = "Streamlit App"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "streamlit run app.py --server.port 5000"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "uv run streamlit run app.py --server.port 5000 --server.headless true"
+waitForPort = 5000
 
 [[ports]]
 localPort = 5000
