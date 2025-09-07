@@ -857,15 +857,36 @@ def show_training_simulation():
                         global_text.text("")
                         st.success("✅ Global model updated (100%)")
                         
-                        # Record metrics
+                        # **REAL TRAINING**: Execute actual federated learning round
+                        st.write("🎯 **Phase 7**: Executing actual federated learning training")
+                        training_progress = st.progress(0)
+                        training_text = st.empty()
+                        
+                        training_text.text("Running federated learning round...")
+                        training_progress.progress(0.3)
+                        
+                        # Call the REAL training function
+                        round_results = system.run_training_round(epsilon=epsilon, local_epochs=local_epochs)
+                        training_progress.progress(0.8)
+                        
+                        # Get real metrics from the training
+                        training_text.text("Training round completed, calculating metrics...")
+                        training_progress.progress(1.0)
+                        training_text.text("")
+                        
+                        # Use REAL metrics from the actual training
+                        real_metrics = round_results['metrics']
                         round_metrics = {
                             'round': st.session_state.current_round + 1,
-                            'accuracy': 0.65 + (st.session_state.current_round * 0.03) + np.random.normal(0, 0.01),
-                            'loss': 2.5 - (st.session_state.current_round * 0.2) + np.random.normal(0, 0.05),
-                            'privacy_budget': st.session_state.epsilon * (st.session_state.current_round + 1),
-                            'byzantine_detected': np.random.randint(0, int(st.session_state.num_healthcare_facilities * byzantine_ratio / 100) + 1),
-                            'communication_cost': np.random.uniform(50, 100)
+                            'accuracy': real_metrics['global_accuracy'],
+                            'loss': real_metrics['global_loss'],
+                            'privacy_budget': real_metrics['privacy_budget_used'],
+                            'participants': real_metrics['num_participants'],
+                            'byzantine_detected': len(system.healthcare_facilities) - real_metrics['num_participants'],
+                            'communication_cost': np.random.uniform(50, 100)  # Keep this simulated for now
                         }
+                        
+                        st.success(f"✅ **REAL TRAINING COMPLETED** - Accuracy: {real_metrics['global_accuracy']:.1%}, Loss: {real_metrics['global_loss']:.4f}")
                         
                         st.session_state.metrics_history.append(round_metrics)
                         st.session_state.current_round += 1
