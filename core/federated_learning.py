@@ -24,9 +24,9 @@ class FederatedLearningSystem:
         self.model_type = model_type
         self.aggregation_method = aggregation_method
         
-        # Initialize system components
+        # Initialize system components with distributed MNIST data
         self.healthcare_facilities = [
-            HealthcareFacility(f"hc_{i}", self._get_facility_type(i), model_type) 
+            HealthcareFacility(f"hc_{i}", self._get_facility_type(i), model_type, self.client_datasets[i]) 
             for i in range(num_healthcare_facilities)
         ]
         
@@ -257,46 +257,59 @@ class FederatedLearningSystem:
 class HealthcareFacility:
     """Represents a healthcare facility participating in federated learning"""
     
-    def __init__(self, facility_id: str, facility_type: str, model_type: str = "Neural Network"):
+    def __init__(self, facility_id: str, facility_type: str, model_type: str = "Neural Network", mnist_data=None):
         self.facility_id = facility_id
         self.facility_type = facility_type
         self.model_type = model_type
-        self.local_data = self._generate_local_data()
+        self.mnist_data = mnist_data  # [x_data, y_data]
         self.local_model = None
         self.reputation_score = random.uniform(0.8, 1.0)
         
-    def _generate_local_data(self) -> Dict[str, np.ndarray]:
-        """Generate synthetic healthcare data"""
-        num_samples = random.randint(100, 500)
-        features = np.random.normal(0, 1, (num_samples, 10))
-        labels = np.random.binomial(1, 0.3, num_samples)
-        
-        return {
-            'features': features,
-            'labels': labels,
-            'num_samples': num_samples
-        }
+    def get_local_data(self) -> Dict[str, np.ndarray]:
+        """Get MNIST data for this facility"""
+        if self.mnist_data is not None:
+            x_data, y_data = self.mnist_data
+            return {
+                'features': x_data,
+                'labels': y_data,
+                'num_samples': len(x_data)
+            }
+        else:
+            # Fallback to synthetic data if no MNIST data provided
+            num_samples = random.randint(100, 500)
+            features = np.random.normal(0, 1, (num_samples, 784))
+            labels = np.random.randint(0, 10, (num_samples, 10))
+            
+            return {
+                'features': features,
+                'labels': labels,
+                'num_samples': num_samples
+            }
     
-    def local_training(self, global_model: Dict[str, np.ndarray], epochs: int = 3) -> Dict[str, Any]:
-        """Perform local training and return model updates"""
-        # Simulate local training (simplified logistic regression)
-        X, y = self.local_data['features'], self.local_data['labels']
-        weights = global_model['weights'].copy()
+    def train_local_model(self, global_model, epochs: int = 3) -> Dict[str, Any]:
+        """Train local model with MNIST data"""
+        local_data = self.get_local_data()
+        X, y = local_data['features'], local_data['labels']
         
-        for _ in range(epochs):
-            # Simple gradient descent step
-            predictions = 1 / (1 + np.exp(-X @ weights))
-            gradient = X.T @ (predictions.flatten() - y) / len(y)
-            weights -= 0.01 * gradient.reshape(-1, 1)
+        # Create a copy of the global model for local training
+        local_model = tf.keras.models.clone_model(global_model['model'])
+        local_model.set_weights(global_model['weights'])
         
-        # Calculate update (difference from global model)
-        weight_update = weights - global_model['weights']
+        # Train the local model
+        history = local_model.fit(X, y, epochs=epochs, batch_size=32, verbose=0)
+        
+        # Get updated weights
+        updated_weights = local_model.get_weights()
+        
+        # Calculate local accuracy
+        local_accuracy = history.history['accuracy'][-1] if 'accuracy' in history.history else 0.0
         
         return {
             'facility_id': self.facility_id,
-            'gradients': weight_update.flatten(),
-            'num_samples': self.local_data['num_samples'],
-            'local_accuracy': random.uniform(0.6, 0.9)
+            'weights': updated_weights,
+            'num_samples': local_data['num_samples'],
+            'local_accuracy': local_accuracy,
+            'loss': history.history['loss'][-1] if 'loss' in history.history else 0.0
         }
 
 

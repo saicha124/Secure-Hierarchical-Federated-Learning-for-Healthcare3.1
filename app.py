@@ -36,7 +36,7 @@ if 'metrics_history' not in st.session_state:
     st.session_state.metrics_history = []
 # System configuration parameters
 if 'num_healthcare_facilities' not in st.session_state:
-    st.session_state.num_healthcare_facilities = 8
+    st.session_state.num_healthcare_facilities = 3
 if 'num_fog_nodes' not in st.session_state:
     st.session_state.num_fog_nodes = 3
 if 'committee_size' not in st.session_state:
