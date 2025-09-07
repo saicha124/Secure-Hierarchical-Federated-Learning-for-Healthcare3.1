@@ -83,6 +83,20 @@ class FederatedLearningSystem:
                 y_train[i * (len(y_train) // n_clients):i * (len(y_train) // n_clients) + (len(y_train) // n_clients)]]
 
         return client_datasets
+    
+    def redistribute_data(self, new_num_facilities):
+        """Redistribute MNIST data when number of facilities changes"""
+        self.num_healthcare_facilities = new_num_facilities
+        self.client_datasets = self.load_train_dataset(n_clients=new_num_facilities)
+        
+        # Recreate healthcare facilities with new data distribution
+        self.healthcare_facilities = [
+            HealthcareFacility(f"hc_{i}", self._get_facility_type(i), self.model_type, self.client_datasets[i]) 
+            for i in range(new_num_facilities)
+        ]
+        
+        # Reset registration for new facilities
+        self.registered_participants = set()
 
     def load_test_dataset(self):
         """Load MNIST test dataset"""
@@ -93,6 +107,27 @@ class FederatedLearningSystem:
         # Convert target classes to categorical ones
         y_test = to_categorical(y_test)
         return x_test, y_test
+    
+    def predict_image(self, image_data):
+        """Make prediction on a single image using the global model"""
+        if self.global_model and 'model' in self.global_model:
+            # Ensure image is in the right format (28x28 flattened to 784)
+            if len(image_data.shape) == 2:
+                image_data = image_data.reshape(1, -1)
+            elif len(image_data.shape) == 1:
+                image_data = image_data.reshape(1, -1)
+            
+            # Normalize if needed
+            if image_data.max() > 1.0:
+                image_data = image_data.astype('float32') / 255.0
+                
+            prediction = self.global_model['model'].predict(image_data, verbose=0)
+            predicted_class = np.argmax(prediction[0])
+            confidence = float(np.max(prediction[0]))
+            
+            return predicted_class, confidence, prediction[0]
+        else:
+            return None, 0.0, None
         
     def _get_facility_type(self, index: int) -> str:
         """Assign facility types for diversity"""
@@ -175,11 +210,14 @@ class FederatedLearningSystem:
         local_updates = []
         for facility in self.healthcare_facilities:
             if facility.facility_id in self.registered_participants:
-                update = facility.local_training(self.global_model, local_epochs)
+                update = facility.train_local_model(self.global_model, local_epochs)
                 
-                # Apply differential privacy
-                noisy_update = self.differential_privacy.add_noise(update['gradients'])
-                update['gradients'] = noisy_update
+                # Apply differential privacy to weights
+                noisy_weights = []
+                for weight_array in update['weights']:
+                    noisy_weight = self.differential_privacy.add_noise(weight_array.flatten())
+                    noisy_weights.append(noisy_weight.reshape(weight_array.shape))
+                update['weights'] = noisy_weights
                 
                 local_updates.append(update)
                 round_results['participants'].append(facility.facility_id)
@@ -187,11 +225,13 @@ class FederatedLearningSystem:
         # Phase 2: Secret sharing of updates
         shared_updates = []
         for update in local_updates:
-            shares = self.secret_sharing.create_shares(update['gradients'].tobytes())
+            # Convert weights to bytes for secret sharing
+            weights_bytes = b''.join([w.tobytes() for w in update['weights']])
+            shares = self.secret_sharing.create_shares(weights_bytes)
             shared_updates.append({
                 'facility_id': update['facility_id'],
                 'shares': shares,
-                'metadata': {k: v for k, v in update.items() if k != 'gradients'}
+                'metadata': {k: v for k, v in update.items() if k != 'weights'}
             })
         
         # Phase 3: Committee validation

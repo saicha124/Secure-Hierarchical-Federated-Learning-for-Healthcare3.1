@@ -16,6 +16,8 @@ from core.crypto_primitives import DifferentialPrivacy, ShamirSecretSharing
 from core.byzantine_tolerance import ValidatorCommittee, ProofOfWork
 from core.healthcare_data import HealthcareDataSimulator, StandardDatasetLoader
 from utils.visualization import SystemArchitectureViz, MetricsViz
+from PIL import Image
+import cv2
 
 # Page configuration
 st.set_page_config(
@@ -307,6 +309,8 @@ def main():
     )
     
     if params_changed:
+        facilities_changed = new_facilities != st.session_state.num_healthcare_facilities
+        
         st.session_state.num_healthcare_facilities = new_facilities
         st.session_state.num_fog_nodes = new_fog_nodes
         st.session_state.committee_size = new_committee_size
@@ -320,7 +324,13 @@ def main():
         st.session_state.secret_sharing_shares = new_secret_sharing_shares
         st.session_state.dataset_choice = new_dataset_choice
         st.session_state.uploaded_file = uploaded_file
-        st.session_state.system = None  # Reset system to reinitialize with new params
+        
+        # Handle facilities change differently to preserve data redistribution
+        if facilities_changed and st.session_state.system is not None:
+            st.session_state.system.redistribute_data(new_facilities)
+        else:
+            st.session_state.system = None  # Reset system to reinitialize with new params
+            
         st.session_state.simulation_started = False
         st.session_state.current_round = 0
         st.session_state.metrics_history = []
@@ -335,7 +345,7 @@ def main():
     st.sidebar.title("Navigation")
     page = st.sidebar.selectbox(
         "Select Page",
-        ["System Overview", "Architecture", "Training Simulation", "Accuracy & Loss Graphs", "Privacy & Security Metrics", "Byzantine Tolerance"]
+        ["System Overview", "Architecture", "Training Simulation", "Accuracy & Loss Graphs", "Privacy & Security Metrics", "Byzantine Tolerance", "Image Prediction"]
     )
     
     if page == "System Overview":
@@ -350,6 +360,8 @@ def main():
         show_privacy_security_metrics()
     elif page == "Byzantine Tolerance":
         show_byzantine_tolerance()
+    elif page == "Image Prediction":
+        show_image_prediction()
 
 def show_system_overview():
     st.header("System Overview")
@@ -1418,6 +1430,172 @@ def show_byzantine_tolerance():
                 st.dataframe(pd.DataFrame(results), use_container_width=True)
                 
                 st.success("🎯 Attack successfully mitigated by the Byzantine fault tolerance mechanisms!")
+
+def process_image_for_mnist(uploaded_image):
+    """Process uploaded image to MNIST format (28x28 grayscale, normalized)"""
+    try:
+        # Open image with PIL
+        image = Image.open(uploaded_image)
+        
+        # Convert to grayscale
+        image = image.convert('L')
+        
+        # Resize to 28x28
+        image = image.resize((28, 28), Image.Resampling.LANCZOS)
+        
+        # Convert to numpy array
+        image_array = np.array(image)
+        
+        # For digit recognition, we want dark digits on light background
+        # If background is dark, invert the image
+        if np.mean(image_array) < 127:
+            image_array = 255 - image_array
+        
+        # Normalize to [0, 1]
+        image_array = image_array.astype('float32') / 255.0
+        
+        # Flatten to 784 dimensions
+        image_flattened = image_array.flatten()
+        
+        return image_array, image_flattened
+        
+    except Exception as e:
+        st.error(f"Error processing image: {e}")
+        return None, None
+
+def show_image_prediction():
+    st.header("🔮 Image Prediction with Federated Model")
+    
+    st.markdown("""
+    Upload an image to get predictions from the trained federated learning model. 
+    The system supports various image formats and will automatically process them for digit recognition.
+    """)
+    
+    # Initialize system
+    system = initialize_system()
+    
+    if system.global_model is None or 'model' not in system.global_model:
+        st.warning("⚠️ No trained model available. Please run training simulation first.")
+        st.info("💡 Go to 'Training Simulation' page and run some federated learning rounds to train the model.")
+        return
+    
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.subheader("📁 Upload Image")
+        
+        # File uploader
+        uploaded_file = st.file_uploader(
+            "Choose an image file",
+            type=['png', 'jpg', 'jpeg', 'bmp', 'tiff', 'gif'],
+            help="Upload an image containing a handwritten digit (0-9)"
+        )
+        
+        if uploaded_file is not None:
+            # Display uploaded image
+            st.image(uploaded_file, caption="Uploaded Image", width=200)
+            
+            # Process image
+            with st.spinner("Processing image..."):
+                processed_image, flattened_image = process_image_for_mnist(uploaded_file)
+            
+            if processed_image is not None and flattened_image is not None:
+                st.success("✅ Image processed successfully!")
+                
+                # Show processed image
+                st.subheader("Processed Image (28x28 grayscale)")
+                st.image(processed_image, caption="Processed for MNIST", width=150)
+                
+                # Make prediction
+                if st.button("🎯 Make Prediction", type="primary"):
+                    with st.spinner("Making prediction..."):
+                        predicted_class, confidence, probabilities = system.predict_image(flattened_image)
+                    
+                    if predicted_class is not None:
+                        with col2:
+                            st.subheader("🎯 Prediction Results")
+                            
+                            # Show predicted digit
+                            st.metric("Predicted Digit", str(predicted_class), f"Confidence: {confidence:.1%}")
+                            
+                            # Show all class probabilities
+                            st.subheader("📊 Class Probabilities")
+                            prob_data = {
+                                "Digit": [str(i) for i in range(10)],
+                                "Probability": [f"{prob:.3f}" for prob in probabilities],
+                                "Percentage": [f"{prob*100:.1f}%" for prob in probabilities]
+                            }
+                            st.dataframe(pd.DataFrame(prob_data), use_container_width=True)
+                            
+                            # Create probability chart
+                            fig = go.Figure(data=[
+                                go.Bar(x=[str(i) for i in range(10)], y=probabilities, 
+                                      marker_color=['red' if i == predicted_class else 'lightblue' for i in range(10)])
+                            ])
+                            fig.update_layout(
+                                title="Prediction Probabilities for Each Digit",
+                                xaxis_title="Digit",
+                                yaxis_title="Probability",
+                                height=400
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                            # Model information
+                            st.subheader("🔬 Model Information")
+                            model_info = {
+                                "Architecture": "Dense(350) → Dense(50) → Dense(10)",
+                                "Training Data": "MNIST Dataset",
+                                "Training Method": "Federated Learning",
+                                "Healthcare Facilities": str(system.num_healthcare_facilities),
+                                "Current Round": str(system.current_round),
+                                "Model Accuracy": f"{system.global_model.get('accuracy', 0.0):.3f}"
+                            }
+                            
+                            for key, value in model_info.items():
+                                st.write(f"**{key}:** {value}")
+                    else:
+                        st.error("Failed to make prediction. Please try again.")
+            else:
+                st.error("Failed to process the image. Please try a different image.")
+    
+    with col2:
+        if uploaded_file is None:
+            st.subheader("📝 Instructions")
+            st.markdown("""
+            **How to use:**
+            1. Upload an image containing a handwritten digit (0-9)
+            2. The system will automatically process it to 28×28 grayscale
+            3. Click "Make Prediction" to get results
+            
+            **Supported formats:**
+            - PNG, JPG, JPEG, BMP, TIFF, GIF
+            
+            **Tips for best results:**
+            - Use images with clear, single digits
+            - Dark digits on light background work best
+            - The system automatically handles resizing and formatting
+            
+            **Example sources:**
+            - Draw a digit and take a photo
+            - Use online digit drawing tools
+            - Screenshot digits from documents
+            """)
+            
+            # Show sample MNIST images
+            st.subheader("📚 Sample MNIST Images")
+            if hasattr(system, 'test_data') and system.test_data is not None:
+                x_test, y_test = system.test_data
+                
+                # Show a few random samples
+                sample_indices = np.random.choice(len(x_test), 5, replace=False)
+                
+                cols = st.columns(5)
+                for i, idx in enumerate(sample_indices):
+                    with cols[i]:
+                        # Reshape back to 28x28 for display
+                        img = x_test[idx].reshape(28, 28)
+                        true_label = np.argmax(y_test[idx])
+                        st.image(img, caption=f"Digit: {true_label}", width=60)
 
 if __name__ == "__main__":
     main()
