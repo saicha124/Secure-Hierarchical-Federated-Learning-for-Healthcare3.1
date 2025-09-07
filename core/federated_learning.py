@@ -24,6 +24,11 @@ class FederatedLearningSystem:
         self.model_type = model_type
         self.aggregation_method = aggregation_method
         
+        # Initialize MNIST data first
+        self.feature_vector_length = 784
+        self.input_shape = (self.feature_vector_length,)
+        self.client_datasets = self.load_train_dataset(n_clients=num_healthcare_facilities)
+        
         # Initialize system components with distributed MNIST data
         self.healthcare_facilities = [
             HealthcareFacility(f"hc_{i}", self._get_facility_type(i), model_type, self.client_datasets[i]) 
@@ -44,11 +49,8 @@ class FederatedLearningSystem:
         self.validator_committee = ValidatorCommittee(committee_size=committee_size)
         self.proof_of_work = ProofOfWork(difficulty=4)
         
-        # Initialize data simulator with MNIST
+        # Initialize data simulator
         self.data_simulator = HealthcareDataSimulator()
-        self.feature_vector_length = 784
-        self.input_shape = (self.feature_vector_length,)
-        self.client_datasets = self.load_train_dataset(n_clients=num_healthcare_facilities)
         
         # System state
         self.current_round = 0
