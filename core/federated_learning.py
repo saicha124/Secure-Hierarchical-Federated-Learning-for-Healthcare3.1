@@ -206,6 +206,11 @@ class FederatedLearningSystem:
             'metrics': {}
         }
         
+        # Register all participants if not already registered
+        for facility in self.healthcare_facilities:
+            if facility.facility_id not in self.registered_participants:
+                self.register_participant(facility.facility_id)
+        
         # Phase 1: Local training at healthcare facilities
         local_updates = []
         for facility in self.healthcare_facilities:
@@ -262,27 +267,59 @@ class FederatedLearningSystem:
                 aggregate = fog_node.aggregate_updates(fog_updates)
                 fog_aggregates.append(aggregate)
         
-        # Phase 5: Global aggregation at leader server
-        if fog_aggregates:
-            global_update = self.leader_server.global_aggregation(fog_aggregates)
-            self.global_model = self._update_global_model(global_update)
-            round_results['aggregated_updates'] = global_update
+        # Phase 5: Global aggregation at leader server (FedAvg)
+        if local_updates:
+            # Simple FedAvg: average all the weights from local updates
+            aggregated_weights = self._fedavg_aggregation(local_updates)
+            self.global_model = self._update_global_model(aggregated_weights)
+            round_results['aggregated_weights'] = "Weights averaged using FedAvg"
         
         # Calculate round metrics
         round_results['metrics'] = self._calculate_round_metrics()
         
         return round_results
     
-    def _update_global_model(self, global_update: Dict[str, Any]) -> Dict[str, np.ndarray]:
-        """Update global model with aggregated updates"""
-        learning_rate = 0.01
+    def _fedavg_aggregation(self, local_updates: List[Dict[str, Any]]) -> List[np.ndarray]:
+        """Perform Federated Averaging (FedAvg) of local model weights"""
+        if not local_updates:
+            return self.global_model['weights']
         
-        if 'weights' in global_update:
-            self.global_model['weights'] -= learning_rate * global_update['weights']
+        # Get the number of layers from the first update
+        num_layers = len(local_updates[0]['weights'])
         
-        # Update metrics (simplified)
-        self.global_model['accuracy'] = min(0.95, self.global_model['accuracy'] + 0.02)
-        self.global_model['loss'] = max(0.1, self.global_model['loss'] * 0.95)
+        # Initialize aggregated weights
+        aggregated_weights = []
+        
+        # Calculate total samples for weighted averaging
+        total_samples = sum(update['num_samples'] for update in local_updates)
+        
+        # For each layer, compute weighted average
+        for layer_idx in range(num_layers):
+            layer_weights = []
+            layer_shape = local_updates[0]['weights'][layer_idx].shape
+            
+            # Weighted sum of weights for this layer
+            weighted_sum = np.zeros(layer_shape)
+            for update in local_updates:
+                weight = update['num_samples'] / total_samples
+                weighted_sum += weight * update['weights'][layer_idx]
+            
+            aggregated_weights.append(weighted_sum)
+        
+        return aggregated_weights
+    
+    def _update_global_model(self, aggregated_weights: List[np.ndarray]) -> Dict[str, np.ndarray]:
+        """Update global model with properly aggregated weights using FedAvg"""
+        # Update the global model with the aggregated weights
+        self.global_model['weights'] = aggregated_weights
+        self.global_model['model'].set_weights(aggregated_weights)
+        
+        # Evaluate the updated model on test data for real metrics
+        if hasattr(self, 'test_data') and self.test_data is not None:
+            x_test, y_test = self.test_data
+            loss, accuracy = self.global_model['model'].evaluate(x_test, y_test, verbose=0)
+            self.global_model['accuracy'] = float(accuracy)
+            self.global_model['loss'] = float(loss)
         
         return self.global_model
     
