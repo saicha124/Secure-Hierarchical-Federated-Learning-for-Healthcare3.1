@@ -2,6 +2,10 @@ import numpy as np
 import random
 from typing import List, Dict, Any, Tuple
 import tensorflow as tf
+from tensorflow.keras.datasets import mnist
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.utils import to_categorical
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
@@ -12,7 +16,7 @@ from .healthcare_data import HealthcareDataSimulator
 class FederatedLearningSystem:
     """Main federated learning system coordinating all components"""
     
-    def __init__(self, num_healthcare_facilities: int = 8, num_fog_nodes: int = 3, committee_size: int = 5, 
+    def __init__(self, num_healthcare_facilities: int = 3, num_fog_nodes: int = 3, committee_size: int = 5, 
                  model_type: str = "Neural Network", aggregation_method: str = "FedAvg"):
         self.num_healthcare_facilities = num_healthcare_facilities
         self.num_fog_nodes = num_fog_nodes
@@ -40,41 +44,77 @@ class FederatedLearningSystem:
         self.validator_committee = ValidatorCommittee(committee_size=committee_size)
         self.proof_of_work = ProofOfWork(difficulty=4)
         
-        # Initialize data simulator
+        # Initialize data simulator with MNIST
         self.data_simulator = HealthcareDataSimulator()
+        self.feature_vector_length = 784
+        self.input_shape = (self.feature_vector_length,)
+        self.client_datasets = self.load_train_dataset(n_clients=num_healthcare_facilities)
         
         # System state
         self.current_round = 0
         self.global_model = self._initialize_global_model()
         self.registered_participants = set()
+        self.test_data = self.load_test_dataset()
+    
+    def load_train_dataset(self, n_clients=3, permute=False):
+        """Load MNIST training dataset and distribute among clients"""
+        client_datasets = {}  # defining local datasets for each client
+
+        (x_train, y_train), (_, _) = mnist.load_data()
+
+        x_train = x_train.reshape(x_train.shape[0], self.feature_vector_length)
+
+        if permute == True:
+            permutation_indexes = np.random.permutation(len(x_train))
+            x_train = x_train[permutation_indexes]
+            y_train = y_train[permutation_indexes]
+
+        x_train = x_train.astype('float32')
+        x_train /= 255
+
+        # Convert target classes to categorical ones
+        y_train = to_categorical(y_train)
+
+        for i in range(n_clients):
+            client_datasets[i] = [
+                x_train[i * (len(x_train) // n_clients):i * (len(x_train) // n_clients) + (len(x_train) // n_clients)],
+                y_train[i * (len(y_train) // n_clients):i * (len(y_train) // n_clients) + (len(y_train) // n_clients)]]
+
+        return client_datasets
+
+    def load_test_dataset(self):
+        """Load MNIST test dataset"""
+        (_, _), (x_test, y_test) = mnist.load_data()
+        x_test = x_test.reshape(x_test.shape[0], self.feature_vector_length)
+        x_test = x_test.astype('float32')
+        x_test /= 255
+        # Convert target classes to categorical ones
+        y_test = to_categorical(y_test)
+        return x_test, y_test
         
     def _get_facility_type(self, index: int) -> str:
         """Assign facility types for diversity"""
         types = ["hospital", "clinic", "research_center", "emergency_center"]
         return types[index % len(types)]
     
+    def get_model(self):
+        """Create MNIST model with specific architecture"""
+        model = Sequential()
+        model.add(Dense(350, input_shape=(784,), activation='relu'))
+        model.add(Dense(50, activation='relu'))
+        model.add(Dense(10, activation='softmax'))
+        
+        # Configure the model and start training
+        model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+        
+        return model
+    
     def _create_model(self, model_type: str):
         """Create model based on type"""
         if model_type == "Neural Network":
-            model = tf.keras.Sequential([
-                tf.keras.layers.Dense(64, activation='relu', input_shape=(10,)),
-                tf.keras.layers.Dropout(0.2),
-                tf.keras.layers.Dense(32, activation='relu'),
-                tf.keras.layers.Dense(1, activation='sigmoid')
-            ])
-            model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-            return model
+            return self.get_model()
         elif model_type == "CNN":
-            model = tf.keras.Sequential([
-                tf.keras.layers.Reshape((10, 1), input_shape=(10,)),
-                tf.keras.layers.Conv1D(32, 3, activation='relu'),
-                tf.keras.layers.Conv1D(64, 3, activation='relu'),
-                tf.keras.layers.GlobalMaxPooling1D(),
-                tf.keras.layers.Dense(50, activation='relu'),
-                tf.keras.layers.Dense(1, activation='sigmoid')
-            ])
-            model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-            return model
+            return self.get_model()  # Use same architecture for consistency
         elif model_type == "SVM":
             return SVC(probability=True, random_state=42)
         elif model_type == "Logistic Regression":
