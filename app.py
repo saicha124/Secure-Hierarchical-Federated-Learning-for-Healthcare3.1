@@ -240,9 +240,11 @@ def main():
                 min_value=0.001, max_value=0.1, value=0.01, step=0.001, format="%.3f",
                 help="Controls noise magnitude. Lower = less noise, higher accuracy. Higher = more noise, stronger privacy."
             )
+            st.session_state.sensitivity = sensitivity
     else:
         new_epsilon = float('inf')  # Effectively disable privacy
         sensitivity = 0.01
+        st.session_state.sensitivity = sensitivity
     new_delta = st.sidebar.selectbox(
         "Delta (δ)",
         [1e-3, 1e-4, 1e-5, 1e-6], index=[1e-3, 1e-4, 1e-5, 1e-6].index(st.session_state.delta)
@@ -723,7 +725,8 @@ def show_training_simulation():
         dataset_info = st.session_state.dataset_info
         dataset_text = f"**Dataset:** {dataset_info.get('name', 'Not loaded')}"
         if 'train_samples' in dataset_info:
-            dataset_text += f"\n**Samples:** {dataset_info['train_samples']:,} training"
+            dataset_text += f"\n**Samples:** {dataset_info['train_samples']:,} training, {dataset_info.get('test_samples', 0):,} test"
+            dataset_text += f"\n**Classes:** {dataset_info.get('num_classes', 10)} digits (0-9)"
         elif 'samples' in dataset_info:
             dataset_text += f"\n**Samples:** {dataset_info['samples']}"
         
@@ -731,6 +734,7 @@ def show_training_simulation():
         
         # Training configuration (use session state values)
         epsilon = st.session_state.epsilon
+        sensitivity = st.session_state.get('sensitivity', 0.01)  # Get sensitivity from session state
         learning_rate = st.slider("Learning Rate", 0.001, 0.1, 0.01, 0.001)
         local_epochs = st.slider("Local Epochs", 1, 10, 3)
         global_rounds = st.slider("Global Rounds", 5, st.session_state.max_training_rounds, 
