@@ -413,10 +413,7 @@ def show_system_overview():
                 st.metric("Dataset", "Healthcare", f"📊 {system.feature_vector_length} features")
         else:
             st.metric("Dataset", "Unknown", "❓ Not configured")
-    
-    with col3:
         st.metric("Privacy Guarantee", "ε-DP", f"ε={st.session_state.epsilon}")
-        st.metric("Model Type", st.session_state.model_type, st.session_state.aggregation_method)
     
     st.markdown("---")
     
@@ -1535,11 +1532,16 @@ def show_image_prediction():
     # Check if model supports image prediction (MNIST)
     if not hasattr(system, 'feature_vector_length') or system.feature_vector_length != 784:
         st.warning("⚠️ Image prediction requires MNIST dataset configuration.")
-        st.info("""
+        
+        current_features = getattr(system, 'feature_vector_length', 'unknown')
+        st.info(f"""
+        **Current Configuration:**
+        - Model features: {current_features} (need 784 for MNIST images)
+        - TensorFlow: {'✅ Available' if hasattr(system, 'feature_vector_length') and system.feature_vector_length == 784 else '❌ Not using MNIST'}
+        
         **To enable image prediction:**
-        - The system needs to be configured with MNIST dataset (784 features for 28x28 images)
-        - Current model is trained on healthcare data (11 features)
-        - Reset the system configuration to use MNIST dataset
+        - Use the "🔄 Reset System" button in the sidebar to reinitialize with MNIST
+        - The system will automatically detect TensorFlow and load MNIST dataset
         """)
         return
     
