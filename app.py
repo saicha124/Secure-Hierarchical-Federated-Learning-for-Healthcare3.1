@@ -1510,20 +1510,14 @@ def show_image_prediction():
     # Initialize system
     system = initialize_system()
     
-    # Check if TensorFlow is available and model supports image prediction
+    # Check if model supports image prediction (MNIST)
     if not hasattr(system, 'feature_vector_length') or system.feature_vector_length != 784:
-        st.warning("⚠️ Image prediction is not available with the current model configuration.")
+        st.warning("⚠️ Image prediction requires MNIST dataset configuration.")
         st.info("""
-        **Why image prediction is unavailable:**
-        - The current model is trained on healthcare data (11 features), not image data (784 features)
-        - TensorFlow was removed due to disk space constraints
-        - The federated learning system is optimized for healthcare privacy scenarios
-        
-        **Available features:**
-        - Healthcare data simulation and federated training
-        - Privacy-preserving mechanisms (differential privacy, secret sharing)
-        - Byzantine fault tolerance demonstrations
-        - System architecture visualization
+        **To enable image prediction:**
+        - The system needs to be configured with MNIST dataset (784 features for 28x28 images)
+        - Current model is trained on healthcare data (11 features)
+        - Reset the system configuration to use MNIST dataset
         """)
         return
     
