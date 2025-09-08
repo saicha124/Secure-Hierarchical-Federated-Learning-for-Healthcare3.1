@@ -1505,15 +1505,32 @@ def process_image_for_mnist(uploaded_image):
         return None, None
 
 def show_image_prediction():
-    st.header("🔮 Image Prediction with Federated Model")
+    st.header("🔮 Model Prediction Interface")
+    
+    # Initialize system
+    system = initialize_system()
+    
+    # Check if TensorFlow is available and model supports image prediction
+    if not hasattr(system, 'feature_vector_length') or system.feature_vector_length != 784:
+        st.warning("⚠️ Image prediction is not available with the current model configuration.")
+        st.info("""
+        **Why image prediction is unavailable:**
+        - The current model is trained on healthcare data (11 features), not image data (784 features)
+        - TensorFlow was removed due to disk space constraints
+        - The federated learning system is optimized for healthcare privacy scenarios
+        
+        **Available features:**
+        - Healthcare data simulation and federated training
+        - Privacy-preserving mechanisms (differential privacy, secret sharing)
+        - Byzantine fault tolerance demonstrations
+        - System architecture visualization
+        """)
+        return
     
     st.markdown("""
     Upload an image to get predictions from the trained federated learning model. 
     The system supports various image formats and will automatically process them for digit recognition.
     """)
-    
-    # Initialize system
-    system = initialize_system()
     
     if system.global_model is None or 'model' not in system.global_model:
         st.warning("⚠️ No trained model available. Please run training simulation first.")
