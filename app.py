@@ -219,10 +219,20 @@ def main():
     
     # Privacy parameters
     st.sidebar.subheader("Privacy Parameters")
-    new_epsilon = st.sidebar.slider(
-        "Epsilon (ε) - Privacy Budget",
-        min_value=0.01, max_value=1.0, value=st.session_state.epsilon, step=0.01
+    # Option to disable differential privacy
+    enable_privacy = st.sidebar.checkbox(
+        "Enable Differential Privacy", 
+        value=True,
+        help="Uncheck to disable privacy protection and get better accuracy"
     )
+    
+    if enable_privacy:
+        new_epsilon = st.sidebar.slider(
+            "Epsilon (ε) - Privacy Budget",
+            min_value=0.01, max_value=1.0, value=st.session_state.epsilon, step=0.01
+        )
+    else:
+        new_epsilon = float('inf')  # Effectively disable privacy
     new_delta = st.sidebar.selectbox(
         "Delta (δ)",
         [1e-3, 1e-4, 1e-5, 1e-6], index=[1e-3, 1e-4, 1e-5, 1e-6].index(st.session_state.delta)
@@ -701,8 +711,11 @@ def show_training_simulation():
         
         # Display current configuration values
         st.markdown("**Current Configuration:**")
-        st.write(f"• Differential Privacy (ε): {st.session_state.epsilon}")
-        st.write(f"• Delta (δ): {st.session_state.delta}")
+        if st.session_state.epsilon == float('inf'):
+            st.write("• Differential Privacy: **DISABLED** (No privacy protection)")
+        else:
+            st.write(f"• Differential Privacy (ε): {st.session_state.epsilon}")
+            st.write(f"• Delta (δ): {st.session_state.delta}")
         st.write(f"• Healthcare Facilities: {st.session_state.num_healthcare_facilities}")
         st.write(f"• Fog Nodes: {st.session_state.num_fog_nodes}")
         st.write(f"• Committee Size: {st.session_state.committee_size}")

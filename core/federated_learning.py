@@ -330,11 +330,15 @@ class FederatedLearningSystem:
             if facility.facility_id in self.registered_participants:
                 update = facility.train_local_model(self.global_model, local_epochs)
                 
-                # Apply differential privacy to weights
-                noisy_weights = []
-                for weight_array in update['weights']:
-                    noisy_weight = self.differential_privacy.add_noise(weight_array.flatten())
-                    noisy_weights.append(noisy_weight.reshape(weight_array.shape))
+                # Apply differential privacy to weights (if enabled)
+                if epsilon != float('inf'):
+                    noisy_weights = []
+                    for weight_array in update['weights']:
+                        noisy_weight = self.differential_privacy.add_noise(weight_array.flatten())
+                        noisy_weights.append(noisy_weight.reshape(weight_array.shape))
+                else:
+                    # No privacy - use original weights
+                    noisy_weights = update['weights']
                 update['weights'] = noisy_weights
                 
                 local_updates.append(update)
