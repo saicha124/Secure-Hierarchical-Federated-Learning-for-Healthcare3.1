@@ -970,14 +970,14 @@ def show_training_metrics():
                [{"secondary_y": False}, {"secondary_y": False}]]
     )
     
-    # Accuracy plot
+    # Accuracy plot - start from 0
     fig.add_trace(
         go.Scatter(x=df_metrics['round'], y=df_metrics['accuracy'],
                    mode='lines+markers', name='Accuracy', line=dict(color='green')),
         row=1, col=1
     )
     
-    # Loss plot
+    # Loss plot - start from 0
     fig.add_trace(
         go.Scatter(x=df_metrics['round'], y=df_metrics['loss'],
                    mode='lines+markers', name='Loss', line=dict(color='red')),
@@ -998,8 +998,12 @@ def show_training_metrics():
         row=2, col=2
     )
     
+    # Set y-axis to start from 0 for accuracy and loss
+    fig.update_yaxes(range=[0, 1], row=1, col=1)  # Accuracy 0-100%
+    fig.update_yaxes(range=[0, max(df_metrics['loss']) * 1.1], row=1, col=2)  # Loss starting from 0
+    
     fig.update_layout(height=600, showlegend=False, title_text="Training Progress Metrics")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 def show_accuracy_loss_graphs():
     st.header("Accuracy & Loss Graphs")
@@ -1046,7 +1050,7 @@ def show_accuracy_loss_graphs():
             xaxis_title="Training Round",
             yaxis_title="Accuracy",
             height=400,
-            yaxis=dict(range=[0.5, 1.0]),
+            yaxis=dict(range=[0, 1.0]),  # Start from 0
             showlegend=False
         )
         
@@ -1092,6 +1096,7 @@ def show_accuracy_loss_graphs():
             xaxis_title="Training Round",
             yaxis_title="Loss",
             height=400,
+            yaxis=dict(range=[0, max(df_metrics['loss']) * 1.1]),  # Start from 0
             showlegend=False
         )
         
@@ -1110,6 +1115,25 @@ def show_accuracy_loss_graphs():
             st.metric("Best Loss", f"{min_loss:.3f}")
         with loss_col3:
             st.metric("Reduction", f"{loss_reduction:.3f}", delta=f"{loss_reduction:.3f}")
+    
+    # Data Tables Section
+    st.subheader("📋 Training Data Tables")
+    
+    table_col1, table_col2 = st.columns(2)
+    
+    with table_col1:
+        st.write("**Accuracy by Round**")
+        accuracy_table = df_metrics[['round', 'accuracy']].copy()
+        accuracy_table['accuracy'] = accuracy_table['accuracy'].apply(lambda x: f"{x:.4f}")
+        accuracy_table.columns = ['Round', 'Accuracy']
+        st.dataframe(accuracy_table, width="stretch", hide_index=True)
+    
+    with table_col2:
+        st.write("**Loss by Round**")
+        loss_table = df_metrics[['round', 'loss']].copy()
+        loss_table['loss'] = loss_table['loss'].apply(lambda x: f"{x:.4f}")
+        loss_table.columns = ['Round', 'Loss']
+        st.dataframe(loss_table, width="stretch", hide_index=True)
     
     # Combined accuracy and loss graph
     st.subheader("Combined Accuracy & Loss Visualization")
@@ -1145,10 +1169,10 @@ def show_accuracy_loss_graphs():
         secondary_y=True
     )
     
-    # Update axis labels
+    # Update axis labels - set accuracy to start from 0
     fig_combined.update_xaxes(title_text="Training Round")
-    fig_combined.update_yaxes(title_text="Accuracy", secondary_y=False)
-    fig_combined.update_yaxes(title_text="Loss", secondary_y=True)
+    fig_combined.update_yaxes(title_text="Accuracy", range=[0, 1], secondary_y=False)
+    fig_combined.update_yaxes(title_text="Loss", range=[0, max(df_metrics['loss']) * 1.1], secondary_y=True)
     
     fig_combined.update_layout(
         title="Federated Learning Progress: Accuracy vs Loss",
