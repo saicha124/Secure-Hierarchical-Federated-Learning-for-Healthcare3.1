@@ -31,7 +31,7 @@ class FederatedLearningSystem:
         self.num_fog_nodes = num_fog_nodes
         self.committee_size = committee_size
         
-        # If TensorFlow is not available, switch to a compatible model
+        # Prefer TensorFlow models when available
         if not TENSORFLOW_AVAILABLE and model_type in ["Neural Network", "CNN"]:
             model_type = "Logistic Regression"
             
