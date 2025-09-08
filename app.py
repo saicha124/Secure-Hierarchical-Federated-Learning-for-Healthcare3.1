@@ -232,8 +232,17 @@ def main():
             min_value=0.1, max_value=10.0, value=st.session_state.epsilon, step=0.1,
             help="0.1-2: Strict privacy | 2-5: Balanced privacy | 5-10: Relaxed privacy"
         )
+        
+        # Add sensitivity control for advanced users
+        with st.sidebar.expander("⚙️ Advanced Privacy Settings"):
+            sensitivity = st.slider(
+                "Sensitivity Parameter",
+                min_value=0.001, max_value=0.1, value=0.01, step=0.001, format="%.3f",
+                help="Controls noise magnitude. Lower = less noise, higher accuracy. Higher = more noise, stronger privacy."
+            )
     else:
         new_epsilon = float('inf')  # Effectively disable privacy
+        sensitivity = 0.01
     new_delta = st.sidebar.selectbox(
         "Delta (δ)",
         [1e-3, 1e-4, 1e-5, 1e-6], index=[1e-3, 1e-4, 1e-5, 1e-6].index(st.session_state.delta)
@@ -904,7 +913,7 @@ def show_training_simulation():
                         training_progress.progress(0.3)
                         
                         # Call the REAL training function
-                        round_results = system.run_training_round(epsilon=epsilon, local_epochs=local_epochs)
+                        round_results = system.run_training_round(epsilon=epsilon, local_epochs=local_epochs, sensitivity=sensitivity)
                         training_progress.progress(0.8)
                         
                         # Get real metrics from the training

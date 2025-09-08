@@ -66,7 +66,7 @@ class FederatedLearningSystem:
         self.leader_server = LeaderServer("leader_server", aggregation_method)
         self.trusted_authority = TrustedAuthority("trusted_authority")
         
-        # Initialize cryptographic components
+        # Initialize cryptographic components (will be updated with interface parameters)
         self.differential_privacy = DifferentialPrivacy(epsilon=0.1)
         self.secret_sharing = ShamirSecretSharing(threshold=3, num_shares=5)
         self.validator_committee = ValidatorCommittee(committee_size=committee_size)
@@ -308,8 +308,12 @@ class FederatedLearningSystem:
         
         return False
     
-    def run_training_round(self, epsilon: float = 0.1, local_epochs: int = 3) -> Dict[str, Any]:
+    def run_training_round(self, epsilon: float = 0.1, local_epochs: int = 3, sensitivity: float = 0.01) -> Dict[str, Any]:
         """Execute a single federated learning round"""
+        # Update differential privacy parameters if provided
+        if epsilon != 0.1 or sensitivity != 0.01:
+            self.differential_privacy = DifferentialPrivacy(epsilon=epsilon, sensitivity=sensitivity)
+            
         self.current_round += 1
         round_results = {
             'round': self.current_round,

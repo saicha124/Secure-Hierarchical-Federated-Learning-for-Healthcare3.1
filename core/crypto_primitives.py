@@ -8,7 +8,7 @@ import base64
 class DifferentialPrivacy:
     """Implementation of differential privacy mechanisms"""
     
-    def __init__(self, epsilon: float = 0.1, delta: float = 1e-5, sensitivity: float = 2.0):
+    def __init__(self, epsilon: float = 0.1, delta: float = 1e-5, sensitivity: float = 0.01):
         self.epsilon = epsilon
         self.delta = delta
         self.sensitivity = sensitivity
