@@ -44,7 +44,7 @@ if 'num_fog_nodes' not in st.session_state:
 if 'committee_size' not in st.session_state:
     st.session_state.committee_size = 5
 if 'epsilon' not in st.session_state:
-    st.session_state.epsilon = 0.1
+    st.session_state.epsilon = 1.0
 if 'delta' not in st.session_state:
     st.session_state.delta = 1e-5
 
@@ -229,7 +229,8 @@ def main():
     if enable_privacy:
         new_epsilon = st.sidebar.slider(
             "Epsilon (ε) - Privacy Budget",
-            min_value=0.01, max_value=1.0, value=st.session_state.epsilon, step=0.01
+            min_value=0.1, max_value=10.0, value=st.session_state.epsilon, step=0.1,
+            help="0.1-2: Strict privacy | 2-5: Balanced privacy | 5-10: Relaxed privacy"
         )
     else:
         new_epsilon = float('inf')  # Effectively disable privacy
