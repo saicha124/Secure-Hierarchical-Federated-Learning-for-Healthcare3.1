@@ -54,7 +54,12 @@ if 'max_training_rounds' not in st.session_state:
 if 'aggregation_method' not in st.session_state:
     st.session_state.aggregation_method = 'FedAvg'
 if 'model_type' not in st.session_state:
-    st.session_state.model_type = 'Neural Network (Deep Learning)'
+    # Default to Neural Network if TensorFlow is available, otherwise Logistic Regression
+    try:
+        import tensorflow as tf
+        st.session_state.model_type = 'Neural Network (Deep Learning)'
+    except ImportError:
+        st.session_state.model_type = 'Logistic Regression (Linear Model)'
 if 'enable_secret_sharing' not in st.session_state:
     st.session_state.enable_secret_sharing = True
 if 'secret_sharing_threshold' not in st.session_state:

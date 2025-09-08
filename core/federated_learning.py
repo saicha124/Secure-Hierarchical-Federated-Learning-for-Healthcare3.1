@@ -38,7 +38,7 @@ class FederatedLearningSystem:
         self.model_type = model_type
         self.aggregation_method = aggregation_method
         
-        # Initialize data based on TensorFlow availability
+        # Initialize data - prioritize MNIST when TensorFlow is available
         if TENSORFLOW_AVAILABLE:
             # Use MNIST data when TensorFlow is available
             self.feature_vector_length = 784
@@ -46,7 +46,7 @@ class FederatedLearningSystem:
             self.client_datasets = self.load_train_dataset(n_clients=num_healthcare_facilities)
             self.test_data = self.load_test_dataset()
         else:
-            # Use synthetic healthcare data when TensorFlow is not available
+            # Fallback to synthetic healthcare data when TensorFlow is not available
             self.feature_vector_length = 11  # Healthcare features
             self.input_shape = (self.feature_vector_length,)
             self.client_datasets = self.load_synthetic_dataset(n_clients=num_healthcare_facilities)
