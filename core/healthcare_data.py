@@ -6,8 +6,15 @@ import io
 import json
 import pickle
 from datetime import datetime, timedelta
-import tensorflow as tf
-from tensorflow.keras.datasets import mnist, cifar10
+try:
+    import tensorflow as tf
+    from tensorflow.keras.datasets import mnist, cifar10
+    TENSORFLOW_AVAILABLE = True
+except ImportError:
+    TENSORFLOW_AVAILABLE = False
+    tf = None
+    mnist = None
+    cifar10 = None
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 
@@ -543,6 +550,8 @@ class StandardDatasetLoader:
     
     def load_mnist(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Load and preprocess MNIST dataset"""
+        if not TENSORFLOW_AVAILABLE:
+            raise ImportError("TensorFlow is not available. MNIST dataset cannot be loaded.")
         print("Loading MNIST dataset...")
         (x_train, y_train), (x_test, y_test) = mnist.load_data()
         
@@ -559,6 +568,8 @@ class StandardDatasetLoader:
     
     def load_cifar10(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Load and preprocess CIFAR-10 dataset"""
+        if not TENSORFLOW_AVAILABLE:
+            raise ImportError("TensorFlow is not available. CIFAR-10 dataset cannot be loaded.")
         print("Loading CIFAR-10 dataset...")
         (x_train, y_train), (x_test, y_test) = cifar10.load_data()
         
