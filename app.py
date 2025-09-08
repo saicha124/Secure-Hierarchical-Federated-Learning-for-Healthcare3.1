@@ -356,6 +356,15 @@ def main():
     if st.session_state.dataset_choice != "Synthetic Healthcare Data":
         load_selected_dataset()
     
+    # System Reset Button
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🔄 Reset System", help="Force system reinitialization with current settings"):
+        st.session_state.system = None
+        st.session_state.simulation_started = False
+        st.session_state.current_round = 0
+        st.session_state.metrics_history = []
+        st.session_state.dataset_loaded = False
+        st.rerun()
     
     # Navigation
     st.sidebar.title("Navigation")
@@ -382,6 +391,9 @@ def main():
 def show_system_overview():
     st.header("System Overview")
     
+    # Initialize system to check current configuration
+    system = initialize_system()
+    
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -391,6 +403,16 @@ def show_system_overview():
     with col2:
         st.metric("Validator Committee Size", str(st.session_state.committee_size), "Rotating")
         st.metric("Security Level", "High", "✅ All checks passed")
+        
+    with col3:
+        # Show current dataset configuration
+        if hasattr(system, 'feature_vector_length'):
+            if system.feature_vector_length == 784:
+                st.metric("Dataset", "MNIST", "🖼️ Image Data")
+            else:
+                st.metric("Dataset", "Healthcare", f"📊 {system.feature_vector_length} features")
+        else:
+            st.metric("Dataset", "Unknown", "❓ Not configured")
     
     with col3:
         st.metric("Privacy Guarantee", "ε-DP", f"ε={st.session_state.epsilon}")
