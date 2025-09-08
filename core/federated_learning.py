@@ -560,29 +560,44 @@ class FogNode:
         if not updates:
             return {}
         
-        # Reconstruct gradients from secret shares (simplified)
-        aggregated_gradients = np.zeros_like(
-            np.frombuffer(updates[0]['shares'][0], dtype=np.float64)
-        )
+        # Get the dimension from the first update's weights
+        first_weights = updates[0].get('weights', [np.array([[0.0]])])
+        if isinstance(first_weights, list) and len(first_weights) > 0:
+            weight_shape = first_weights[0].shape
+            aggregated_weights = np.zeros(weight_shape)
+        else:
+            # Fallback dimension
+            aggregated_weights = np.zeros((784, 10))
         
         total_samples = 0
+        total_loss = 0.0
+        
         for update in updates:
-            # In practice, would reconstruct from secret shares
-            # Here we simulate the reconstruction
-            gradient = np.random.normal(0, 0.1, len(aggregated_gradients))
-            num_samples = update['metadata']['num_samples']
+            # Get actual weights from the update
+            weights = update.get('weights', [])
+            num_samples = update.get('num_samples', 1)
+            loss = update.get('loss', 0.0)
             
-            aggregated_gradients += gradient * num_samples
+            if weights and len(weights) > 0:
+                # Use actual model weights for aggregation
+                weight_contrib = np.array(weights[0]) * num_samples
+                aggregated_weights += weight_contrib
+            
             total_samples += num_samples
+            total_loss += loss * num_samples
         
         if total_samples > 0:
-            aggregated_gradients /= total_samples
+            aggregated_weights /= total_samples
+            avg_loss = total_loss / total_samples
+        else:
+            avg_loss = 0.0
         
         return {
             'node_id': self.node_id,
-            'weights': aggregated_gradients.reshape(-1, 1),
+            'weights': [aggregated_weights],
             'num_participants': len(updates),
-            'total_samples': total_samples
+            'total_samples': total_samples,
+            'avg_loss': avg_loss
         }
 
 
