@@ -1472,9 +1472,10 @@ def process_image_for_mnist(uploaded_image):
         # Convert to numpy array
         image_array = np.array(image)
         
-        # For digit recognition, we want dark digits on light background
-        # If background is dark, invert the image
-        if np.mean(image_array) < 127:
+        # MNIST expects WHITE digits on BLACK background
+        # Most uploaded images have BLACK digits on WHITE background, so we need to invert
+        # If the image has a light background (mean > 127), invert it
+        if np.mean(image_array) > 127:
             image_array = 255 - image_array
         
         # Normalize to [0, 1]
